@@ -4,7 +4,18 @@ import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
 
-enum ToastTone { info, success, error }
+enum ToastTone {
+  info(AppColors.accent, AppColors.accentSoft),
+  success(AppColors.success, AppColors.successSoft),
+  error(AppColors.danger, AppColors.dangerSoft);
+
+  const ToastTone(this.color, this.soft);
+
+  final Color color;
+  final Color soft;
+
+  (Color, Color) get colors => (color, soft);
+}
 
 class ToastAction {
   const ToastAction(this.label, this.onPressed);
@@ -45,9 +56,17 @@ class ToastContent {
   final VoidCallback? onTap;
 }
 
-/// The toasts on screen. Get it with [Toasts.of].
+/// The toasts on screen. Get it with [ToastController.of].
 class ToastController extends ChangeNotifier {
   static const maxShown = 3;
+
+  /// The nearest [ToastHost]'s controller. Without one (a screen tested on
+  /// its own), toasts go nowhere.
+  static ToastController of(BuildContext context) =>
+      context.getInheritedWidgetOfExactType<_ToastScope>()?.controller ??
+      _nowhere;
+
+  static final _nowhere = ToastController();
 
   final _entries = <_ToastEntry>[];
 
@@ -221,16 +240,6 @@ class _ToastScope extends InheritedWidget {
   bool updateShouldNotify(_ToastScope old) => controller != old.controller;
 }
 
-abstract final class Toasts {
-  /// The nearest [ToastHost]'s controller. Without one (a screen tested on
-  /// its own), toasts go nowhere.
-  static ToastController of(BuildContext context) =>
-      context.getInheritedWidgetOfExactType<_ToastScope>()?.controller ??
-      _nowhere;
-
-  static final _nowhere = ToastController();
-}
-
 class _ToastCard extends StatefulWidget {
   const _ToastCard({super.key, required this.entry, required this.fromTop});
 
@@ -291,7 +300,7 @@ class _ToastCardState extends State<_ToastCard>
                   entry.schedule();
                 },
                 child: ListenableBuilder(
-                  listenable: entry.updates ?? const _Never(),
+                  listenable: Listenable.merge([entry.updates]),
                   builder: (context, _) =>
                       _ToastBody(entry: entry, content: entry.content()),
                 ),
@@ -304,16 +313,6 @@ class _ToastCardState extends State<_ToastCard>
   }
 }
 
-class _Never implements Listenable {
-  const _Never();
-
-  @override
-  void addListener(VoidCallback listener) {}
-
-  @override
-  void removeListener(VoidCallback listener) {}
-}
-
 class _ToastBody extends StatelessWidget {
   const _ToastBody({required this.entry, required this.content});
 
@@ -323,11 +322,7 @@ class _ToastBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final (fg, bg) = switch (content.tone) {
-      ToastTone.info => (AppColors.accent, AppColors.accentSoft),
-      ToastTone.success => (AppColors.success, AppColors.successSoft),
-      ToastTone.error => (AppColors.danger, AppColors.dangerSoft),
-    };
+    final (fg, bg) = content.tone.colors;
     void close() => entry.owner.dismiss(entry.key);
 
     return DecoratedBox(

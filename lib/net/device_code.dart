@@ -86,11 +86,11 @@ int _check(List<int> payload) => sha256
     .bytes[0];
 
 List<int>? _parseIpv4(String host) {
-  final parts = host.split('.').map(int.tryParse).toList();
-  if (parts.length != 4 || parts.any((p) => p == null || p < 0 || p > 255)) {
+  try {
+    return Uri.parseIPv4Address(host);
+  } on FormatException {
     return null;
   }
-  return parts.cast<int>();
 }
 
 String _toBase32(List<int> bytes) {
@@ -129,7 +129,5 @@ Uint8List? _fromBase32(String chars, int length) {
 }
 
 /// `7K3MQ2XA` → `7K3M-Q2XA`.
-String _group(String chars) => [
-  for (var i = 0; i < chars.length; i += 4)
-    chars.substring(i, i + 4 > chars.length ? chars.length : i + 4),
-].join('-');
+String _group(String chars) =>
+    chars.replaceAllMapped(RegExp(r'.{4}(?!$)'), (m) => '${m[0]}-');

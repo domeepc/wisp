@@ -45,7 +45,7 @@ class _DesktopHomeState extends State<DesktopHome> {
       if (mounted) setState(() => _selected.addAll(files));
     } on Exception {
       if (!mounted) return;
-      Toasts.of(context).message(
+      ToastController.of(context).message(
         'Couldn\'t open the file picker',
         icon: Icons.error_outline,
         tone: ToastTone.error,

@@ -51,10 +51,12 @@ bool isLocalOrigin(String origin) {
   }
   final host = uri.host;
   if (host == 'localhost' || host == '127.0.0.1' || host == '::1') return true;
-  final parts = host.split('.').map(int.tryParse).toList();
-  if (parts.length != 4 || parts.any((p) => p == null || p > 255)) {
+  final List<int> ip;
+  try {
+    ip = Uri.parseIPv4Address(host);
+  } on FormatException {
     return false;
   }
-  final (a, b) = (parts[0]!, parts[1]!);
+  final (a, b) = (ip[0], ip[1]);
   return a == 10 || (a == 172 && b >= 16 && b <= 31) || (a == 192 && b == 168);
 }

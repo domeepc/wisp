@@ -8,8 +8,8 @@ import '../theme/tokens.dart';
 import '../utils/format.dart';
 import '../utils/pick_files.dart';
 import '../utils/transfer_text.dart';
-import '../widgets/device_list_tile.dart';
 import '../widgets/searching_card.dart';
+import '../widgets/device_avatar.dart';
 import '../widgets/section_label.dart';
 import '../widgets/settings_button.dart';
 import '../widgets/toasts.dart';
@@ -100,7 +100,7 @@ class _MobileHomeState extends State<MobileHome> {
 
   void _snack(String message) {
     if (!mounted) return;
-    Toasts.of(context).message(message);
+    ToastController.of(context).message(message);
   }
 
   @override
@@ -184,8 +184,15 @@ class _MobileHomeState extends State<MobileHome> {
                   children: [
                     for (final (i, device) in devices.indexed) ...[
                       if (i > 0) const Divider(),
-                      DeviceListTile(
-                        device: device,
+                      ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.lg,
+                          vertical: AppSpacing.xs,
+                        ),
+                        leading: DeviceAvatar(platform: device.platform),
+                        title: Text(device.name),
+                        subtitle: Text(device.subtitle),
+                        trailing: const Icon(Icons.chevron_right),
                         onTap: () => service.opensElsewhere(device)
                             ? service.handOff(device)
                             : _pickAndSend(pickFiles, to: device),

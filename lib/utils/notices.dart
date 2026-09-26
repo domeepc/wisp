@@ -4,7 +4,6 @@ import '../models/device.dart';
 import '../models/transfer.dart';
 import '../screens/transfer_screen.dart';
 import '../services/wisp_service.dart';
-import '../theme/tokens.dart';
 import '../widgets/device_avatar.dart';
 import '../widgets/toasts.dart';
 import '../widgets/transfer_icon.dart';
@@ -58,9 +57,15 @@ class Notices {
 
   void _joined(Device device) {
     if (service.isWebClient) {
-      _deviceToast(device, 'Connected to ${device.name}', ToastTone.success);
+      showDeviceToast(
+        toasts,
+        device,
+        'Connected to ${device.name}',
+        ToastTone.success,
+      );
     } else if (device.platform == DevicePlatform.browser) {
-      _deviceToast(
+      showDeviceToast(
+        toasts,
         device,
         '${device.name} joined from a browser',
         ToastTone.success,
@@ -71,20 +76,14 @@ class Notices {
   void _left(Device device) {
     // Only the web app's devices matter here: they're all it has.
     if (!service.isWebClient) return;
-    _deviceToast(
+    showDeviceToast(
+      toasts,
       device,
       'Lost connection to ${device.name}',
       ToastTone.error,
       subtitle: 'Trying again while this page is open',
     );
   }
-
-  void _deviceToast(
-    Device device,
-    String title,
-    ToastTone tone, {
-    String? subtitle,
-  }) => showDeviceToast(toasts, device, title, tone, subtitle: subtitle);
 
   void _started(Transfer transfer) {
     if (!transfer.status.isActive) return;
@@ -198,12 +197,12 @@ class _Badged extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final (color, icon) = switch (tone) {
-      ToastTone.success => (AppColors.success, Icons.check),
-      ToastTone.error => (AppColors.danger, Icons.close),
-      ToastTone.info => (null, null),
+    final icon = switch (tone) {
+      ToastTone.success => Icons.check,
+      ToastTone.error => Icons.close,
+      ToastTone.info => null,
     };
-    if (color == null) return child;
+    if (icon == null) return child;
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -215,7 +214,7 @@ class _Badged extends StatelessWidget {
             width: 18,
             height: 18,
             decoration: BoxDecoration(
-              color: color,
+              color: tone.color,
               shape: BoxShape.circle,
               border: Border.all(color: Colors.white, width: 2),
             ),
