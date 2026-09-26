@@ -17,6 +17,7 @@ import '../widgets/wisp_logo.dart';
 import '../widgets/status_dot.dart';
 import '../widgets/this_device_card.dart';
 import '../widgets/transfer_icon.dart';
+import '../widgets/voice_dialog.dart';
 import 'desktop_home.dart';
 import 'send_screen.dart';
 import 'transfer_screen.dart';
@@ -126,6 +127,12 @@ class _MobileHomeState extends State<MobileHome> {
         () => _pickAndSend(() async => [?await askForText(context)]),
       ),
       (Icons.content_paste, 'Paste', () => _pickAndSend(_paste)),
+      if (canRecordVoice)
+        (
+          Icons.mic_none,
+          'Voice',
+          () => _pickAndSend(() async => [?await recordVoice(context)]),
+        ),
     ];
 
     return Scaffold(

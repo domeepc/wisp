@@ -25,6 +25,7 @@ import '../widgets/wisp_logo.dart';
 import '../widgets/status_dot.dart';
 import '../widgets/this_device_card.dart';
 import '../widgets/transfer_icon.dart';
+import '../widgets/voice_dialog.dart';
 import 'home_screen.dart';
 
 /// Page 5: desktop layout — sidebar for picking files, main area for
@@ -111,6 +112,9 @@ class _DesktopHomeState extends State<DesktopHome> {
           ),
           onChooseFiles: () => _add(pickFiles),
           onSendText: () => _add(() async => [?await askForText(context)]),
+          onRecordVoice: canRecordVoice
+              ? () => _add(() async => [?await recordVoice(context)])
+              : null,
         ),
         const SizedBox(height: AppSpacing.xxl),
         SectionLabel(
@@ -260,11 +264,15 @@ class _DropZone extends StatefulWidget {
     required this.onDrop,
     required this.onChooseFiles,
     required this.onSendText,
+    this.onRecordVoice,
   });
 
   final ValueChanged<List<DropItem>> onDrop;
   final VoidCallback onChooseFiles;
   final VoidCallback onSendText;
+
+  /// Null where there's no microphone to use.
+  final VoidCallback? onRecordVoice;
 
   @override
   State<_DropZone> createState() => _DropZoneState();
@@ -338,6 +346,11 @@ class _DropZoneState extends State<_DropZone> {
                 onPressed: widget.onSendText,
                 child: const Text('Send text'),
               ),
+              if (widget.onRecordVoice case final onRecordVoice?)
+                OutlinedButton(
+                  onPressed: onRecordVoice,
+                  child: const Text('Record voice'),
+                ),
             ],
           ),
         ],

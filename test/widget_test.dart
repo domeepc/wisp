@@ -78,6 +78,13 @@ void main() {
     expect(find.text('Browser · Safari'), findsOneWidget);
   });
 
+  testWidgets('phone: every send type fits on a small phone', (tester) async {
+    await _pumpApp(tester, const Size(360, 640), _service());
+    for (final label in ['Files', 'Photos', 'Text', 'Paste', 'Voice']) {
+      expect(find.text(label), findsOneWidget);
+    }
+  });
+
   testWidgets('phone: shows a placeholder with nobody around', (tester) async {
     await _pumpApp(tester, _phone, _service(withDevices: false));
     expect(find.text('Looking for devices…'), findsOneWidget);
@@ -106,6 +113,23 @@ void main() {
     expect(find.text('3 items ready'), findsOneWidget);
     expect(find.text('6.6 MB total'), findsOneWidget);
     expect(find.text('Living room PC'), findsOneWidget);
+  });
+
+  testWidgets('send screen: picked files can be removed', (tester) async {
+    await _pumpScreen(tester, const SendScreen(files: _files), _service());
+    await tester.tap(find.byTooltip('Remove').first);
+    await tester.pump();
+    expect(find.text('2 items ready'), findsOneWidget);
+    expect(find.text('IMG_2041.jpg'), findsNothing);
+
+    await tester.tap(find.byTooltip('Remove').first);
+    await tester.tap(find.byTooltip('Remove').first);
+    await tester.pump();
+    expect(find.text('Nothing selected'), findsOneWidget);
+    // Nothing to send, so the devices do nothing.
+    await tester.tap(find.text('Living room PC'));
+    await tester.pumpAndSettle();
+    expect(find.text('Nothing selected'), findsOneWidget);
   });
 
   testWidgets('transfer screen follows a transfer', (tester) async {

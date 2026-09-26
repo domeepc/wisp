@@ -68,6 +68,8 @@
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Wisp finds your other devices on this Wi-Fi and sends files to them.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Record voice messages to send to your other devices.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Pick photos and videos to send to your other devices.</string>
 	<key>UIFileSharingEnabled</key>

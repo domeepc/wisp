@@ -32,6 +32,8 @@ class _SendScreenState extends State<SendScreen> {
     if (more.isNotEmpty) setState(() => _files.addAll(more));
   }
 
+  void _remove(int index) => setState(() => _files.removeAt(index));
+
   void _sendTo(Device device) {
     final transfer = WispScope.of(context).send(device, List.of(_files));
     Navigator.pushReplacement(
@@ -47,6 +49,7 @@ class _SendScreenState extends State<SendScreen> {
     final text = Theme.of(context).textTheme;
     final devices = WispScope.of(context).devices;
     final count = _files.length == 1 ? '1 item' : '${_files.length} items';
+    final empty = _files.isEmpty;
 
     return Scaffold(
       appBar: AppBar(
@@ -61,9 +64,14 @@ class _SendScreenState extends State<SendScreen> {
         child: ListView(
           padding: const EdgeInsets.all(AppSpacing.xl),
           children: [
-            Text('$count ready', style: text.headlineMedium),
             Text(
-              '${formatBytes(totalBytes(_files))} total',
+              empty ? 'Nothing selected' : '$count ready',
+              style: text.headlineMedium,
+            ),
+            Text(
+              empty
+                  ? 'Tap + to add files'
+                  : '${formatBytes(totalBytes(_files))} total',
               style: text.bodyMedium,
             ),
             const SizedBox(height: AppSpacing.xl),
@@ -75,7 +83,11 @@ class _SendScreenState extends State<SendScreen> {
                 separatorBuilder: (_, _) =>
                     const SizedBox(width: AppSpacing.md),
                 itemBuilder: (context, i) => i < _files.length
-                    ? _FileThumb(file: _files[i], index: i)
+                    ? _FileThumb(
+                        file: _files[i],
+                        index: i,
+                        onRemove: () => _remove(i),
+                      )
                     : _AddTile(onTap: _addFiles),
               ),
             ),
@@ -115,13 +127,17 @@ class _SendScreenState extends State<SendScreen> {
 
   Widget _card(Device device) => DeviceCard(
     device: device,
-    highlighted: true,
-    onTap: () => _sendTo(device),
+    highlighted: _files.isNotEmpty,
+    onTap: _files.isEmpty ? null : () => _sendTo(device),
   );
 }
 
 class _FileThumb extends StatelessWidget {
-  const _FileThumb({required this.file, required this.index});
+  const _FileThumb({
+    required this.file,
+    required this.index,
+    required this.onRemove,
+  });
 
   static const _size = 92.0;
   // Placeholder tints until real thumbnails are loaded.
@@ -129,6 +145,7 @@ class _FileThumb extends StatelessWidget {
 
   final SharedFile file;
   final int index;
+  final VoidCallback onRemove;
 
   @override
   Widget build(BuildContext context) {
@@ -139,23 +156,51 @@ class _FileThumb extends StatelessWidget {
       child: Column(
         crossAxisAlignment: .start,
         children: [
-          Container(
-            width: _size,
-            height: _size,
-            alignment: .center,
-            decoration: BoxDecoration(
-              color: file.isImage
-                  ? _tints[index % _tints.length]
-                  : AppColors.surface,
-              borderRadius: BorderRadius.circular(AppRadius.md),
-              border: file.isImage ? null : Border.all(color: AppColors.border),
-            ),
-            child: file.isImage
-                ? const Icon(
-                    Icons.image_outlined,
-                    color: AppColors.textSecondary,
-                  )
-                : FileTypeBadge(fileName: file.name, size: 48),
+          Stack(
+            children: [
+              Container(
+                width: _size,
+                height: _size,
+                alignment: .center,
+                decoration: BoxDecoration(
+                  color: file.isImage
+                      ? _tints[index % _tints.length]
+                      : AppColors.surface,
+                  borderRadius: BorderRadius.circular(AppRadius.md),
+                  border: file.isImage
+                      ? null
+                      : Border.all(color: AppColors.border),
+                ),
+                child: file.isImage
+                    ? const Icon(
+                        Icons.image_outlined,
+                        color: AppColors.textSecondary,
+                      )
+                    : FileTypeBadge(fileName: file.name, size: 48),
+              ),
+              Positioned(
+                top: 2,
+                right: 2,
+                child: IconButton.filled(
+                  onPressed: onRemove,
+                  tooltip: 'Remove',
+                  iconSize: 14,
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 28,
+                    height: 28,
+                  ),
+                  padding: EdgeInsets.zero,
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppColors.textPrimary.withValues(
+                      alpha: 0.7,
+                    ),
+                    foregroundColor: Colors.white,
+                  ),
+                  icon: const Icon(Icons.close),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: AppSpacing.sm),
           Text(
