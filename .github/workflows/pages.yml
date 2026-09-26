@@ -30,7 +30,12 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       # Pages serves the site under /<repository name>/.
-      - run: flutter build web --release --base-href "/${{ github.event.repository.name }}/"
+      # SIGNALING_URL: repository Settings → Secrets and variables → Actions
+      # → Variables (the deployed server/, e.g. wss://wisp-signal.you.workers.dev).
+      - run: >-
+          flutter build web --release
+          --base-href "/${{ github.event.repository.name }}/"
+          --dart-define=SIGNALING_URL=${{ vars.SIGNALING_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build/web

@@ -6,11 +6,14 @@
 #
 # It builds into build/web_app, not build/web, so it never mixes with the
 # GitHub Pages build (which needs a different base path).
+# Set SIGNALING_URL to the signaling server (server/) to find devices
+# through the internet too.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 out="$PWD/build/web_app"
 
-flutter build web --release --base-href /app/ --no-web-resources-cdn --output "$out"
+flutter build web --release --base-href /app/ --no-web-resources-cdn --output "$out" \
+  --dart-define=SIGNALING_URL="${SIGNALING_URL:-}"
 # The web build bundles the app's assets too, including the previous zip.
 rm -rf "$out/assets/assets/webapp"
 
