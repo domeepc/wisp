@@ -223,9 +223,8 @@ function setConnected(ok, force = false) {
   state.connected = ok;
   const pill = $('status');
   pill.className = `pill ${ok ? 'ok' : 'bad'}`;
-  const address = state.host?.address ? ` · ${state.host.address}` : '';
   $('status-text').textContent = ok
-    ? `Connected to ${hostName()}${address}`
+    ? `Connected to ${hostName()}`
     : `Can't reach ${state.host?.name || 'Wisp'} — is it still open?`;
 }
 
