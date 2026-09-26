@@ -10,7 +10,7 @@ import 'http_utils.dart';
 import 'protocol.dart';
 
 /// The page's files, as served under `/web/`.
-const webFileNames = ['index.html', 'style.css', 'app.js'];
+const webFileNames = ['index.html', 'style.css', 'app.js', 'logo.svg'];
 
 abstract final class BrowserApi {
   static const hello = '/api/wisp/v1/browser/hello';
@@ -33,8 +33,8 @@ const _maxInlineText = 100 * 1024;
 class BrowserBridge {
   BrowserBridge({required this.host, required this.onChanged});
 
-  /// This device, and its address and whether it takes files right now.
-  final ({Device device, String? address, bool receiving}) Function() host;
+  /// This device, and whether it takes files right now.
+  final ({Device device, bool receiving}) Function() host;
 
   /// Browsers came, went or were renamed.
   final VoidCallback onChanged;
@@ -42,6 +42,10 @@ class BrowserBridge {
   /// File name → contents, loaded from the app's assets at start. Empty
   /// if they couldn't be loaded (then the page isn't available).
   Map<String, List<int>> webFiles = const {};
+
+  /// The Flutter web app (path → contents), served under `/app/`. Empty
+  /// unless it was built into the app (see tool/build_web_app.sh).
+  Map<String, List<int>> appFiles = const {};
 
   final _sessions = <String, _BrowserSession>{};
 
@@ -101,6 +105,11 @@ class BrowserBridge {
         await _serveFile(req, 'index.html');
       case ('GET', _) when path.startsWith('/web/'):
         await _serveFile(req, path.substring('/web/'.length));
+      case ('GET', '/app'):
+        req.response.redirect(Uri(path: '/app/'), status: 301);
+        await req.response.close();
+      case ('GET', _) when path.startsWith('/app/'):
+        await _serveAppFile(req, path.substring('/app/'.length));
       case ('POST', BrowserApi.hello):
         await _hello(req);
       case ('GET', BrowserApi.inbox):
@@ -128,6 +137,7 @@ class BrowserBridge {
       'html' => ContentType.html,
       'css' => ContentType('text', 'css', charset: 'utf-8'),
       'js' => ContentType('text', 'javascript', charset: 'utf-8'),
+      'svg' => ContentType('image', 'svg+xml'),
       _ => ContentType.binary,
     };
     req.response
@@ -140,6 +150,47 @@ class BrowserBridge {
         "default-src 'self'; img-src 'self' data:; style-src 'self'; "
             "script-src 'self'; connect-src 'self'; object-src 'none'; "
             "base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
+      )
+      ..add(bytes);
+    await req.response.close();
+  }
+
+  Future<void> _serveAppFile(HttpRequest req, String name) async {
+    final bytes = appFiles[name.isEmpty ? 'index.html' : name];
+    if (bytes == null) {
+      throw HttpError(
+        404,
+        appFiles.isEmpty
+            ? 'The web app isn\'t built into this app'
+            : 'Not found',
+      );
+    }
+    final type = switch (name.split('.').last) {
+      '' || 'html' => ContentType.html,
+      'js' || 'mjs' => ContentType('text', 'javascript', charset: 'utf-8'),
+      'json' => ContentType.json,
+      'wasm' => ContentType('application', 'wasm'),
+      'png' => ContentType('image', 'png'),
+      'otf' => ContentType('font', 'otf'),
+      'ttf' => ContentType('font', 'ttf'),
+      _ => ContentType.binary,
+    };
+    req.response
+      ..headers.contentType = type
+      ..headers.set('Cache-Control', 'no-cache')
+      ..headers.set('X-Content-Type-Options', 'nosniff')
+      ..headers.set('Referrer-Policy', 'no-referrer')
+      // Looser than the page's: Flutter compiles WebAssembly and sets
+      // inline styles, and the app talks to the other devices (plain http
+      // on the LAN) and fetches fonts when there's internet.
+      ..headers.set(
+        'Content-Security-Policy',
+        "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; "
+            "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
+            "font-src 'self' data:; "
+            "connect-src 'self' http: https://fonts.gstatic.com; "
+            "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; "
+            "frame-ancestors 'none'; form-action 'none'",
       )
       ..add(bytes);
     await req.response.close();
@@ -265,7 +316,6 @@ class BrowserBridge {
       'id': h.device.id,
       'name': h.device.name,
       'platform': h.device.platform.name,
-      'address': h.address,
       'receiving': h.receiving,
     };
   }

@@ -26,6 +26,9 @@ void main() {
       loadWebFiles: () async => {
         for (final name in webFileNames)
           name: File('assets/web/$name').readAsBytesSync(),
+        // A stand-in for the web app tool/build_web_app.sh packs in.
+        'app/index.html': utf8.encode('<title>Wisp</title>'),
+        'app/canvaskit/canvaskit.wasm': [0, 97, 115, 109],
       },
     );
     await service.start(discovery: false);
@@ -50,6 +53,7 @@ void main() {
         method,
         Uri.parse('http://127.0.0.1:${service.browserPort}$path'),
       );
+      req.followRedirects = false;
       headers.forEach(req.headers.set);
       if (json != null) {
         req.headers.contentType = ContentType.json;
@@ -266,6 +270,35 @@ void main() {
   test('the browser address', () {
     service.localAddress = '192.168.1.24';
     expect(service.browserUrl, 'http://192.168.1.24:${service.browserPort}');
+  });
+
+  test('the web app is served under /app/', () async {
+    service.localAddress = '192.168.1.24';
+    expect(
+      service.webAppUrl,
+      'http://192.168.1.24:${service.browserPort}/app/',
+    );
+
+    final redirect = await call('GET', '/app');
+    expect(redirect.status, 301);
+    expect(redirect.headers.value('location'), '/app/');
+
+    final index = await call('GET', '/app/');
+    expect(index.status, 200);
+    expect(utf8.decode(index.body), '<title>Wisp</title>');
+    expect(index.headers.contentType?.mimeType, 'text/html');
+    expect(
+      index.headers.value('content-security-policy'),
+      contains("'wasm-unsafe-eval'"),
+    );
+
+    final wasm = await call('GET', '/app/canvaskit/canvaskit.wasm');
+    expect(wasm.headers.contentType?.mimeType, 'application/wasm');
+    expect(wasm.body, [0, 97, 115, 109]);
+
+    expect((await call('GET', '/app/missing.js')).status, 404);
+    // The simple page is still at the root.
+    expect(utf8.decode((await call('GET', '/')).body), contains('Wisp'));
   });
 
   test('a page without a name gets a random one', () async {

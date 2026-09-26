@@ -44,6 +44,7 @@ dependencies:
   basic_utils: ^5.8.2
   crypto: ^3.0.7
   web: ^1.1.1
+  archive: ^4.3.0
 
 dev_dependencies:
   flutter_test:
@@ -56,6 +57,7 @@ dev_dependencies:
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
   shared_preferences_platform_interface: ^2.4.2
+  flutter_launcher_icons: ^0.14.4
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
@@ -71,6 +73,8 @@ flutter:
   # The page browsers get when they open this device's address.
   assets:
     - assets/web/
+    - assets/webapp/
+    - assets/brand/app_icon.png
 
   # To add assets to your application, add an assets section, like this:
   # assets:

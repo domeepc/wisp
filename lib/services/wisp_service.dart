@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -15,6 +16,7 @@ import '../net/browser/browser_http.dart';
 import '../net/browser/web_links.dart';
 import '../net/browser_bridge.dart';
 import '../net/client.dart';
+import '../net/device_code.dart';
 import '../net/discovery.dart';
 import '../net/identity.dart';
 import '../net/protocol.dart';
@@ -135,7 +137,7 @@ class WispService extends ChangeNotifier {
 
   late final _client = WispClient(self: () => self);
   late final _browsers = BrowserBridge(
-    host: () => (device: self, address: localAddress, receiving: _visible),
+    host: () => (device: self, receiving: _visible),
     onChanged: notifyListeners,
   );
   late final _server = WispServer(
@@ -157,7 +159,17 @@ class WispService extends ChangeNotifier {
       await _loadSettings();
       saveDir ??= await _defaultSaveDir();
       try {
-        _browsers.webFiles = await _loadWebFiles();
+        final files = await _loadWebFiles();
+        const app = 'app/';
+        _browsers
+          ..webFiles = {
+            for (final MapEntry(:key, :value) in files.entries)
+              if (!key.startsWith(app)) key: value,
+          }
+          ..appFiles = {
+            for (final MapEntry(:key, :value) in files.entries)
+              if (key.startsWith(app)) key.substring(app.length): value,
+          };
       } catch (_) {
         // No page for browsers, but everything else still works.
       }
@@ -246,13 +258,18 @@ class WispService extends ChangeNotifier {
     return transfer;
   }
 
-  /// This device's code for "Connect with code": its address, plus the
-  /// port if it isn't the usual one.
+  /// This device's code for "Connect with code", like `7K3M-Q2XA`: its
+  /// address in a form that's easy to read out (see device_code.dart).
+  /// Works from the app and from the web app alike.
   String? get connectCode {
     final address = localAddress;
     final port = self.port; // null until the server is listening
     if (address == null || port == null) return null;
-    return port == defaultServerPort ? address : '$address:$port';
+    return encodeDeviceCode(
+      address,
+      port: port,
+      browserPort: browserPort ?? defaultBrowserPort,
+    );
   }
 
   /// The address to open in a browser on another device, e.g.
@@ -264,6 +281,15 @@ class WispService extends ChangeNotifier {
     return 'http://$address:$port';
   }
 
+  /// The Flutter web app on this device, e.g.
+  /// `http://192.168.1.24:53319/app/`. Opened from there, it connects to
+  /// this device by itself. Null unless it was built in (see
+  /// tool/build_web_app.sh).
+  String? get webAppUrl => switch (browserUrl) {
+    final url? when _browsers.appFiles.isNotEmpty => '$url/app/',
+    _ => null,
+  };
+
   /// Connects to a device by its code (see [parseConnectCode]), for when
   /// discovery doesn't find it. Throws [ConnectException] with a message
   /// for the user if that doesn't work.
@@ -271,7 +297,9 @@ class WispService extends ChangeNotifier {
     if (_web case final web?) return web.connect(code);
     final target = parseConnectCode(code, localAddress: localAddress);
     if (target == null) {
-      throw const ConnectException('That doesn\'t look like a code.');
+      throw const ConnectException(
+        'That code doesn\'t look right. Check it and try again.',
+      );
     }
     final device = await _client.register(
       Device(
@@ -282,7 +310,9 @@ class WispService extends ChangeNotifier {
       ),
     );
     if (device == null) {
-      throw ConnectException('No Wisp device answered at ${target.host}.');
+      throw const ConnectException(
+        'No Wisp device answered. Is it on the same Wi-Fi, with Wisp open?',
+      );
     }
     if (device.id == self.id) {
       throw const ConnectException('That\'s this device\'s own code.');
@@ -510,10 +540,21 @@ class WispService extends ChangeNotifier {
   String get saveDirName =>
       saveDir == null ? 'Downloads' : p.basename(saveDir!);
 
-  static Future<Map<String, List<int>>> _loadBundledWebFiles() async => {
-    for (final name in webFileNames)
-      name: (await rootBundle.load('assets/web/$name')).buffer.asUint8List(),
-  };
+  /// The browser page's files, plus the web app's under `app/` if
+  /// tool/build_web_app.sh packed it in.
+  static Future<Map<String, List<int>>> _loadBundledWebFiles() async {
+    final files = <String, List<int>>{
+      for (final name in webFileNames)
+        name: (await rootBundle.load('assets/web/$name')).buffer.asUint8List(),
+    };
+    try {
+      final zip = await rootBundle.load('assets/webapp/webapp.zip');
+      files.addAll(await compute(_unzipWebApp, zip.buffer.asUint8List()));
+    } catch (_) {
+      // Not built in: only the page is served.
+    }
+    return files;
+  }
 
   static DevicePlatform _currentPlatform() {
     if (kIsWeb) return DevicePlatform.browser;
@@ -605,3 +646,8 @@ abstract final class _Keys {
   static const key = 'tlsPrivateKey';
   static const webHosts = 'webHosts';
 }
+
+Map<String, List<int>> _unzipWebApp(Uint8List zip) => {
+  for (final file in ZipDecoder().decodeBytes(zip))
+    if (file.isFile) 'app/${file.name}': file.content,
+};

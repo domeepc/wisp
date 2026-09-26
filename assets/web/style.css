@@ -62,11 +62,16 @@ p { margin: 0; }
   background: var(--surface);
   border-bottom: 1px solid var(--border);
 }
-.brand { display: flex; align-items: baseline; gap: 12px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
 .logo {
-  font: 700 26px var(--font-heading);
-  letter-spacing: -0.03em;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  align-self: center;
+  font: 800 26px var(--font-heading);
+  letter-spacing: -0.04em;
 }
+.logo img { display: block; }
 .tagline { color: var(--text-2); white-space: nowrap; }
 
 .pill {
