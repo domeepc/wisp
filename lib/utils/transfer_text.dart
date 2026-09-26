@@ -35,6 +35,8 @@ String transferSubtitle(Transfer t) {
   if (t.status == TransferStatus.waiting) {
     return toBrowser(t)
         ? 'In their “Shared with you” list'
+        : t.securityCode.isEmpty
+        ? 'Connecting…'
         : 'Security code ${t.securityCode}';
   }
   final when = formatWhen(t.finishedAt ?? t.createdAt);

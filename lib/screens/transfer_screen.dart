@@ -175,7 +175,10 @@ class _TransferView extends StatelessWidget {
             children: [
               Text('Security code', style: text.bodyMedium),
               const Spacer(),
-              Text(t.securityCode, style: AppTheme.mono()),
+              Text(
+                t.securityCode.isEmpty ? '…' : t.securityCode,
+                style: AppTheme.mono(),
+              ),
             ],
           ),
           const SizedBox(height: AppSpacing.sm),

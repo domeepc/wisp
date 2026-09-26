@@ -197,14 +197,21 @@ class _DesktopHomeState extends State<DesktopHome> {
                       width: cardWidth,
                       child: DeviceCard(
                         device: device,
-                        action: FilledButton(
-                          onPressed: count == 0 ? null : () => _sendTo(device),
-                          child: Text(switch (count) {
-                            0 => 'Select files first',
-                            1 => 'Send 1 file',
-                            _ => 'Send $count files',
-                          }),
-                        ),
+                        action: service.opensElsewhere(device)
+                            ? FilledButton(
+                                onPressed: () => service.handOff(device),
+                                child: const Text('Open'),
+                              )
+                            : FilledButton(
+                                onPressed: count == 0
+                                    ? null
+                                    : () => _sendTo(device),
+                                child: Text(switch (count) {
+                                  0 => 'Select files first',
+                                  1 => 'Send 1 file',
+                                  _ => 'Send $count files',
+                                }),
+                              ),
                       ),
                     ),
                 ],

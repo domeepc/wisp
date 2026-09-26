@@ -13,6 +13,7 @@ import '../models/device.dart';
 import '../models/shared_file.dart';
 import '../models/transfer.dart';
 import '../net/browser/browser_http.dart';
+import '../net/browser/rtc_peers.dart';
 import '../net/browser/web_links.dart';
 import '../net/browser_bridge.dart';
 import '../net/client.dart';
@@ -23,6 +24,7 @@ import '../net/protocol.dart';
 
 export '../net/protocol.dart' show ConnectException;
 import '../net/server.dart';
+import '../net/signaling.dart';
 import '../utils/random_name.dart';
 
 /// An incoming offer waiting for the user to accept or decline.
@@ -76,6 +78,14 @@ class WispService extends ChangeNotifier {
   final BrowserHttp? _browserHttp;
   WebLinks? _web;
 
+  /// Web app only: devices found through the signaling server, and
+  /// WebRTC to other browsers (see rtc_peers_web.dart).
+  RtcPeers? _rtc;
+
+  /// Installed apps: our entry on the signaling server, so the web app
+  /// can find us from the internet. See [showOnWeb].
+  Signaling? _presence;
+
   Device self;
 
   /// Ports to listen on: HTTPS for other apps, plain HTTP for the browser
@@ -109,14 +119,55 @@ class WispService extends ChangeNotifier {
     _visible = value;
     if (value) _discovery?.announce();
     _web?.paused = !value;
+    _rtc?.paused = !value;
+    _updatePresence();
     notifyListeners();
   }
 
+  /// Whether the web app on the internet can find this device (through
+  /// the signaling server, which then knows its name and local address).
+  bool get showOnWeb => _showOnWeb;
+  bool _showOnWeb = true;
+
+  Future<void> setShowOnWeb(bool value) async {
+    _showOnWeb = value;
+    _updatePresence();
+    notifyListeners();
+    await prefs?.setBool(_Keys.showOnWeb, value);
+  }
+
+  void _updatePresence() {
+    final url = browserUrl;
+    if (signalingUrl.isEmpty ||
+        isWebClient ||
+        !_running ||
+        !_visible ||
+        !_showOnWeb ||
+        url == null) {
+      _presence?.stop();
+      _presence = null;
+      return;
+    }
+    if (_presence case final presence?) return presence.announce();
+    _presence = Signaling(
+      self: () => {
+        'id': self.id,
+        'name': self.name,
+        'platform': self.platform.name,
+        'lan': browserUrl,
+      },
+    )..start();
+  }
+
   /// Nearby devices running Wisp, plus browsers that have the page open.
-  List<Device> get devices =>
-      (_web?.devices ??
-            [..._devices.values.map((s) => s.device), ..._browsers.devices])
-        ..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  List<Device> get devices => switch (_web) {
+    // Devices we're linked to directly win over the same ones in the room.
+    final web? => [
+      ...web.devices,
+      ...?_rtc?.devices.where((d) => !web.owns(d.id)),
+    ],
+    null => [..._devices.values.map((s) => s.device), ..._browsers.devices],
+  }..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   final _devices = <String, ({Device device, DateTime lastSeen})>{};
 
   /// Newest last.
@@ -201,6 +252,7 @@ class WispService extends ChangeNotifier {
       _tick = Timer.periodic(const Duration(seconds: 2), (_) => _onTick());
       _running = true;
       startError = null;
+      _updatePresence();
     } catch (e) {
       startError = '$e';
     }
@@ -208,6 +260,8 @@ class WispService extends ChangeNotifier {
   }
 
   Future<void> stop() async {
+    _presence?.stop();
+    _rtc?.stop();
     if (_web case final web?) {
       web.stop();
       _running = false;
@@ -240,6 +294,8 @@ class WispService extends ChangeNotifier {
       sessionId: sessionId,
       securityCode: switch (fingerprint) {
         final fingerprint? => securityCode(fingerprint, sessionId),
+        // Browser to browser: comes from the connection, once it's up.
+        null when _rtc?.owns(peer.id) ?? false => '',
         // From a browser there's no certificate to check; a random code
         // at least shows it's the same transfer on both screens.
         null when isWebClient => randomHex(2).toUpperCase(),
@@ -248,7 +304,9 @@ class WispService extends ChangeNotifier {
       },
     );
     _addTransfer(transfer);
-    if (_web case final web?) {
+    if (_rtc?.owns(peer.id) ?? false) {
+      _rtc!.send(transfer);
+    } else if (_web case final web?) {
       web.send(transfer);
     } else if (_browsers.owns(peer.id)) {
       _browsers.share(transfer);
@@ -330,6 +388,8 @@ class WispService extends ChangeNotifier {
     self = self.copyWith(name: name);
     _discovery?.announce();
     _web?.renamed();
+    _rtc?.renamed();
+    _presence?.announce();
     notifyListeners();
     await prefs?.setString(_Keys.name, name);
   }
@@ -369,6 +429,7 @@ class WispService extends ChangeNotifier {
       await prefs.setString(_Keys.name, self.name); // keep the random name
     }
     if (isWebClient) return; // the browser decides where downloads go
+    _showOnWeb = await prefs.getBool(_Keys.showOnWeb) ?? true;
     final dir = await prefs.getString(_Keys.saveDir);
     // The folder may be gone, or (on macOS) no longer allowed.
     if (dir != null && await _isWritable(dir)) saveDir ??= dir;
@@ -409,9 +470,24 @@ class WispService extends ChangeNotifier {
           saved: false,
         ),
     ]);
+    if (kIsWeb && signalingUrl.isNotEmpty) {
+      _rtc = RtcPeers(
+        self: () => self,
+        onChanged: notifyListeners,
+        onOffer: _onOffer,
+      )..paused = !_visible;
+    }
     _running = true;
     notifyListeners();
   }
+
+  /// A device the web app can't reach from where it is: an installed app,
+  /// seen from the internet. [handOff] opens its own web app instead.
+  bool opensElsewhere(Device device) =>
+      !(_web?.owns(device.id) ?? false) &&
+      (_rtc?.isInstalled(device.id) ?? false);
+
+  void handOff(Device device) => _rtc?.handOff(device.id);
 
   /// This device's certificate: the saved one, or a new one on first run.
   Future<Identity> _loadIdentity() async {
@@ -462,6 +538,7 @@ class WispService extends ChangeNotifier {
     final address = await _findLocalAddress();
     if (_devices.length != before || address != localAddress) {
       localAddress = address;
+      _updatePresence();
       notifyListeners();
     }
   }
@@ -645,6 +722,7 @@ abstract final class _Keys {
   static const cert = 'tlsCertificate';
   static const key = 'tlsPrivateKey';
   static const webHosts = 'webHosts';
+  static const showOnWeb = 'showOnWeb';
 }
 
 Map<String, List<int>> _unzipWebApp(Uint8List zip) => {

@@ -186,7 +186,9 @@ class _MobileHomeState extends State<MobileHome> {
                       if (i > 0) const Divider(),
                       DeviceListTile(
                         device: device,
-                        onTap: () => _pickAndSend(pickFiles, to: device),
+                        onTap: () => service.opensElsewhere(device)
+                            ? service.handOff(device)
+                            : _pickAndSend(pickFiles, to: device),
                       ),
                     ],
                   ],

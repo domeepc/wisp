@@ -104,8 +104,12 @@ class WebLinks {
     try {
       await _hello(link);
     } on Exception {
-      throw const ConnectException(
-        'No Wisp device answered. Is it on the same Wi-Fi, with Wisp open?',
+      throw ConnectException(
+        onInternet
+            ? 'Browsers don\'t let a website reach devices on your Wi-Fi. '
+                  'Scan the QR code in Connect with code on the other device '
+                  'instead: that opens Wisp from the device itself.'
+            : 'No Wisp device answered. Is it on the same Wi-Fi, with Wisp open?',
       );
     }
     link
@@ -358,6 +362,11 @@ class WebLinks {
         },
       );
 }
+
+/// This page came from the internet (like GitHub Pages), not from a Wisp
+/// device. Browsers block https pages from reaching local addresses, so
+/// it can't connect to anything.
+bool get onInternet => Uri.base.scheme == 'https';
 
 /// Reads a device's code (see device_code.dart), or a browser address:
 /// `192.168.1.24`,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../net/protocol.dart';
+import '../net/signaling.dart';
 import '../services/wisp_service.dart';
 import '../theme/tokens.dart';
 import '../utils/open_folder.dart';
@@ -87,6 +88,18 @@ class SettingsScreen extends StatelessWidget {
                                     ClipboardData(text: code),
                                   ),
                                 ),
+                        ),
+                      ],
+                      if (signalingUrl.isNotEmpty && !service.isWebClient) ...[
+                        const Divider(),
+                        SwitchListTile(
+                          title: const Text('Show on the web app'),
+                          subtitle: const Text(
+                            'Browsers on this Wi-Fi can find this device '
+                            'through the internet, without a QR code',
+                          ),
+                          value: service.showOnWeb,
+                          onChanged: service.setShowOnWeb,
                         ),
                       ],
                       // The link has the address in it, so it's copied,
