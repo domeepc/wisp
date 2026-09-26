@@ -177,6 +177,12 @@ class SettingsScreen extends StatelessWidget {
                             const WispLogo(size: 24),
                             const SizedBox(width: AppSpacing.sm),
                             Text('Wisp', style: text.titleMedium),
+                            const Spacer(),
+                            // Set by flutter build: --build-name, or pubspec.
+                            Text(
+                              'Version ${const String.fromEnvironment('FLUTTER_BUILD_NAME')}',
+                              style: text.bodyMedium,
+                            ),
                           ],
                         ),
                         const SizedBox(height: AppSpacing.sm),

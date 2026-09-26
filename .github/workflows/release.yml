@@ -35,7 +35,13 @@ jobs:
           cache: true
       - run: flutter pub get
       - run: flutter test
-      - run: ./tool/build_web_app.sh
+      # Tagged: the web app shows the same version as the installed apps.
+      - run: |
+          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
+            version="${GITHUB_REF_NAME#v}"
+            export BUILD_NAME="${version%%-*}"
+          fi
+          ./tool/build_web_app.sh
       - uses: actions/upload-artifact@v4
         with:
           name: webapp
