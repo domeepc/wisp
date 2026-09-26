@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 
 import 'tokens.dart';
 
 abstract final class AppTheme {
   /// Monospace style for things like the "4F9A" security code.
-  static TextStyle mono({double fontSize = 20}) => GoogleFonts.ibmPlexMono(
+  static TextStyle mono({double fontSize = 20}) => TextStyle(
+    fontFamily: 'IBM Plex Mono',
     fontSize: fontSize,
     fontWeight: .w600,
     letterSpacing: 4,
@@ -164,20 +164,21 @@ abstract final class AppTheme {
   /// mockups — swap it here if you find the exact font), body text uses
   /// IBM Plex Sans.
   static TextTheme _textTheme() {
-    TextStyle heading(double size, {double spacing = 0}) =>
-        GoogleFonts.interTight(
-          fontSize: size,
-          fontWeight: .w700,
-          letterSpacing: spacing,
-          color: AppColors.textPrimary,
-        );
+    TextStyle heading(double size, {double spacing = 0}) => TextStyle(
+      fontFamily: 'Inter Tight',
+      fontSize: size,
+      fontWeight: .w700,
+      letterSpacing: spacing,
+      color: AppColors.textPrimary,
+    );
 
     TextStyle body(
       double size, {
       FontWeight weight = .w400,
       Color color = AppColors.textPrimary,
       double spacing = 0,
-    }) => GoogleFonts.ibmPlexSans(
+    }) => TextStyle(
+      fontFamily: 'IBM Plex Sans',
       fontSize: size,
       fontWeight: weight,
       color: color,

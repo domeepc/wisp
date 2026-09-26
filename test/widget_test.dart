@@ -2,7 +2,6 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:wisp/main.dart';
@@ -72,9 +71,6 @@ const _phone = Size(390, 844);
 const _desktop = Size(1440, 900);
 
 void main() {
-  // Tests have no network, so don't let google_fonts try to download fonts.
-  GoogleFonts.config.allowRuntimeFetching = false;
-
   testWidgets('phone: lists nearby devices', (tester) async {
     await _pumpApp(tester, _phone, _service());
     expect(find.text('NEARBY · 4'), findsOneWidget);
@@ -279,7 +275,7 @@ void main() {
     await _pumpScreen(tester, TransferScreen(transfer: transfer), _service());
 
     expect(find.text('Waiting for download'), findsOneWidget);
-    expect(find.textContaining('Shared with you'), findsOneWidget);
+    expect(find.textContaining('asked in their browser'), findsOneWidget);
     expect(find.text('AB12'), findsNothing);
   });
 

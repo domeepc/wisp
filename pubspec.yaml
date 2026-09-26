@@ -33,8 +33,6 @@ dependencies:
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
-  cupertino_icons: ^1.0.8
-  google_fonts: ^8.2.1
   file_picker: ^13.1.0
   path_provider: ^2.1.6
   path: ^1.9.1
@@ -73,9 +71,28 @@ flutter:
 
   # The page browsers get when they open this device's address.
   assets:
-    - assets/web/
     - assets/webapp/
     - assets/brand/app_icon.png
+    # The fonts' licenses (SIL Open Font License) travel with them.
+    - assets/fonts/InterTight-OFL.txt
+    - assets/fonts/IBMPlex-OFL.txt
+
+  fonts:
+    - family: Inter Tight
+      fonts:
+        - asset: assets/fonts/InterTight-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/InterTight-ExtraBold.ttf
+          weight: 800
+    - family: IBM Plex Sans
+      fonts:
+        - asset: assets/fonts/IBMPlexSans-Regular.ttf
+        - asset: assets/fonts/IBMPlexSans-SemiBold.ttf
+          weight: 600
+    - family: IBM Plex Mono
+      fonts:
+        - asset: assets/fonts/IBMPlexMono-SemiBold.ttf
+          weight: 600
 
   # To add assets to your application, add an assets section, like this:
   # assets:
