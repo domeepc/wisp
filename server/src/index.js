@@ -7,6 +7,7 @@
 
 export default {
   async fetch(request, env) {
+    if (new URL(request.url).pathname === '/ice') return iceServers(env);
     if (request.headers.get('Upgrade') !== 'websocket') {
       return new Response('Wisp signaling server\n');
     }
@@ -14,6 +15,30 @@ export default {
     return room.fetch(request);
   },
 };
+
+/**
+ * How browsers reach each other: STUN, plus a TURN relay (Cloudflare
+ * Realtime) once its key is set with `wrangler secret put TURN_KEY_ID` and
+ * `TURN_KEY_API_TOKEN`. The relay is for networks where devices can't
+ * connect directly, like iPhones on the same Wi-Fi.
+ */
+async function iceServers(env) {
+  let body = { iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] };
+  if (env.TURN_KEY_ID && env.TURN_KEY_API_TOKEN) {
+    // ponytail: anyone can ask for relay logins here; rate-limit if the
+    // TURN bill grows.
+    const res = await fetch(
+      `https://rtc.live.cloudflare.com/v1/turn/keys/${env.TURN_KEY_ID}/credentials/generate-ice-servers`,
+      {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${env.TURN_KEY_API_TOKEN}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ttl: 86400 }),
+      },
+    );
+    if (res.ok) body = await res.json();
+  }
+  return Response.json(body, { headers: { 'Access-Control-Allow-Origin': '*' } });
+}
 
 /** The room for a request: its IPv4 address, or its IPv6 /64 network. */
 function roomFor(request) {

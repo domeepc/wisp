@@ -53,7 +53,30 @@ class RtcPeers {
   /// Browsers, which we send to ourselves.
   bool owns(String id) => _peers.containsKey(id) && _peers[id]!.lan == null;
 
-  void start() => _signaling.start();
+  void start() {
+    _signaling.start();
+    _loadIceServers();
+  }
+
+  /// STUN until the signaling server tells us more (a TURN relay).
+  web.RTCConfiguration _config = web.RTCConfiguration(
+    iceServers: [web.RTCIceServer(urls: 'stun:stun.cloudflare.com:3478'.toJS)]
+        .toJS,
+  );
+
+  Future<void> _loadIceServers() async {
+    try {
+      final url = _signaling.url.replace(
+        scheme: _signaling.url.scheme == 'wss' ? 'https' : 'http',
+        path: '/ice',
+      );
+      final res = await web.window.fetch(url.toString().toJS).toDart;
+      // The reply is an RTCConfiguration as it is: {iceServers: [...]}.
+      _config = (await res.json().toDart)! as web.RTCConfiguration;
+    } catch (_) {
+      // Keep STUN; devices that can see each other still connect.
+    }
+  }
 
   void stop() {
     _signaling.stop();
@@ -131,7 +154,9 @@ class RtcPeers {
                 ? at + _chunkSize
                 : bytes.length;
             await s.roomToSend();
-            s.channel!.send(Uint8List.sublistView(bytes, at, end).toJS);
+            // An exact-size buffer: some browsers send a view's whole
+            // underlying buffer.
+            s.channel!.send(bytes.sublist(at, end).buffer.toJS);
             sent += end - at;
             t.setFileProgress(i, sent);
           }
@@ -262,13 +287,7 @@ class RtcPeers {
   }
 
   _Session _open(String id, String peer) {
-    final pc = web.RTCPeerConnection(
-      web.RTCConfiguration(
-        iceServers: [
-          web.RTCIceServer(urls: 'stun:stun.l.google.com:19302'.toJS),
-        ].toJS,
-      ),
-    );
+    final pc = web.RTCPeerConnection(_config);
     final s = _sessions[id] = _Session(id, peer, pc);
     pc.onicecandidate = ((web.RTCPeerConnectionIceEvent e) {
       final c = e.candidate;
