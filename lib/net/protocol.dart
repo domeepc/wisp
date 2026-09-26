@@ -26,6 +26,8 @@
 import 'dart:io';
 import 'dart:math';
 
+import 'device_code.dart';
+
 const protocolVersion = 'wisp/2';
 const discoveryPort = 53318;
 const defaultServerPort = 53318;
@@ -64,6 +66,11 @@ String randomHex(int bytes) => List.generate(
   String code, {
   String? localAddress,
 }) {
+  // Normally a device code (see device_code.dart); a raw address works too.
+  if (normalizeDeviceCode(code) != null) {
+    final address = decodeDeviceCode(code);
+    return address == null ? null : (host: address.host, port: address.port);
+  }
   var host = code.trim();
   var port = defaultServerPort;
 

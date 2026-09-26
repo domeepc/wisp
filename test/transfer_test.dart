@@ -9,6 +9,7 @@ import 'package:wisp/models/device.dart';
 import 'package:wisp/models/shared_file.dart';
 import 'package:wisp/models/transfer.dart';
 import 'package:wisp/net/client.dart';
+import 'package:wisp/net/device_code.dart';
 import 'package:wisp/net/identity.dart';
 import 'package:wisp/net/protocol.dart';
 import 'package:wisp/net/server.dart';
@@ -246,7 +247,19 @@ void main() {
     test('this device\'s code', () async {
       expect(WispService().connectCode, isNull); // not started yet
       a.localAddress = '192.168.1.24';
-      expect(a.connectCode, '192.168.1.24:${a.self.port}');
+      final code = a.connectCode!;
+      expect(code, isNot(contains('192')));
+      expect(decodeDeviceCode(code), (
+        host: '192.168.1.24',
+        port: a.self.port,
+        browserPort: a.browserPort,
+      ));
+    });
+
+    test('connects with the other device\'s code', () async {
+      b.localAddress = '127.0.0.1';
+      final device = await a.connect(b.connectCode!.toLowerCase());
+      expect(device.id, b.self.id);
     });
 
     test('explains what went wrong', () async {
@@ -280,6 +293,68 @@ void main() {
       expect(parseConnectCode('300', localAddress: '192.168.1.1'), isNull);
       expect(parseConnectCode('host/evil'), isNull);
       expect(parseConnectCode('1.2.3.4:99999'), isNull);
+      final code = encodeDeviceCode('10.0.0.5', port: 4000)!;
+      expect(parseConnectCode(code), (host: '10.0.0.5', port: 4000));
+    });
+  });
+
+  group('device codes', () {
+    test('usual ports make a short code', () {
+      final code = encodeDeviceCode('192.168.1.24')!;
+      expect(code, matches(RegExp(r'^[0-9A-Z]{4}-[0-9A-Z]{4}$')));
+      expect(decodeDeviceCode(code), (
+        host: '192.168.1.24',
+        port: defaultServerPort,
+        browserPort: defaultBrowserPort,
+      ));
+    });
+
+    test('other ports make a longer one', () {
+      final code = encodeDeviceCode(
+        '10.0.0.5',
+        port: 40000,
+        browserPort: 40001,
+      )!;
+      expect(code.replaceAll('-', ''), hasLength(15));
+      expect(decodeDeviceCode(code), (
+        host: '10.0.0.5',
+        port: 40000,
+        browserPort: 40001,
+      ));
+    });
+
+    test('typing is forgiving', () {
+      final code = encodeDeviceCode('192.168.1.24')!;
+      final sloppy = code
+          .toLowerCase()
+          .replaceAll('-', ' ')
+          .replaceAll('0', 'o')
+          .replaceAll('1', 'l');
+      expect(decodeDeviceCode(sloppy)?.host, '192.168.1.24');
+    });
+
+    test('a typo is caught, not sent somewhere else', () {
+      final code = encodeDeviceCode('192.168.1.24')!.replaceAll('-', '');
+      var caught = 0;
+      for (var i = 0; i < code.length; i++) {
+        final wrong = code[i] == 'X' ? 'Y' : 'X';
+        final typo = code.replaceRange(i, i + 1, wrong);
+        if (decodeDeviceCode(typo) == null) caught++;
+      }
+      expect(caught, code.length);
+    });
+
+    test('neighbours get different-looking codes', () {
+      final a = encodeDeviceCode('192.168.1.24')!;
+      final b = encodeDeviceCode('192.168.1.25')!;
+      expect(a.substring(0, 4), isNot(b.substring(0, 4)));
+    });
+
+    test('only IPv4 addresses', () {
+      expect(encodeDeviceCode('fe80::1'), isNull);
+      expect(encodeDeviceCode('my-pc.local'), isNull);
+      expect(decodeDeviceCode('192.168.1.24'), isNull);
+      expect(decodeDeviceCode('ABCD'), isNull);
     });
   });
 

@@ -9,6 +9,7 @@ import 'package:wisp/models/shared_file.dart';
 import 'package:wisp/models/transfer.dart';
 import 'package:wisp/net/browser/browser_http.dart';
 import 'package:wisp/net/browser/web_links.dart';
+import 'package:wisp/net/device_code.dart';
 import 'package:wisp/services/wisp_service.dart';
 
 /// [BrowserHttp] for tests, on dart:io instead of a browser.
@@ -223,6 +224,12 @@ void main() {
       parseBrowserAddress('http://192.168.1.24:4000/'),
       Uri.parse('http://192.168.1.24:4000'),
     );
+    // Device codes carry the browser port.
+    expect(
+      parseBrowserAddress(encodeDeviceCode('192.168.1.24', browserPort: 4001)!),
+      Uri.parse('http://192.168.1.24:4001'),
+    );
+    expect(parseBrowserAddress('ZZZZ-ZZZZ'), isNull); // mistyped code
     expect(parseBrowserAddress('https://192.168.1.24'), isNull);
     expect(parseBrowserAddress('bad host!'), isNull);
     expect(parseBrowserAddress(''), isNull);

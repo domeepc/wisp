@@ -8,6 +8,7 @@ import '../../models/device.dart';
 import '../../models/shared_file.dart';
 import '../../models/transfer.dart';
 import '../browser_bridge.dart' show BrowserApi;
+import '../device_code.dart';
 import '../protocol.dart';
 import '../server.dart' show Offer;
 import 'browser_http.dart';
@@ -95,13 +96,17 @@ class WebLinks {
   Future<Device> connect(String code) async {
     final address = parseBrowserAddress(code);
     if (address == null) {
-      throw const ConnectException('That doesn\'t look like an address.');
+      throw const ConnectException(
+        'That code doesn\'t look right. Check it and try again.',
+      );
     }
     final link = _links['$address'] ?? _Link(address, saved: true);
     try {
       await _hello(link);
     } on Exception {
-      throw ConnectException('No Wisp device answered at ${address.host}.');
+      throw const ConnectException(
+        'No Wisp device answered. Is it on the same Wi-Fi, with Wisp open?',
+      );
     }
     link
       ..saved = true
@@ -354,11 +359,17 @@ class WebLinks {
       );
 }
 
-/// Reads the address a device shows for browsers: `192.168.1.24`,
+/// Reads a device's code (see device_code.dart), or a browser address:
+/// `192.168.1.24`,
 /// `192.168.1.24:53319` or `http://192.168.1.24:53319`. The app's own
 /// code (HTTPS port, or no port) is fine too — it's mapped to the browser
 /// port. Returns null if it makes no sense.
 Uri? parseBrowserAddress(String code) {
+  if (normalizeDeviceCode(code) != null) {
+    final address = decodeDeviceCode(code);
+    if (address == null) return null;
+    return Uri(scheme: 'http', host: address.host, port: address.browserPort);
+  }
   var text = code.trim();
   if (text.isEmpty) return null;
   if (!text.contains('://')) text = 'http://$text';
