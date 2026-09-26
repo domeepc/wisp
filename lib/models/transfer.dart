@@ -34,8 +34,14 @@ class Transfer extends ChangeNotifier {
   final Device peer;
   final List<SharedFile> files;
 
-  /// Short code both devices show so people can check they match.
-  final String securityCode;
+  /// Short code both devices show so people can check they match. Empty
+  /// until known (browser to browser, it comes from the connection).
+  String securityCode;
+
+  void setSecurityCode(String code) {
+    securityCode = code;
+    notifyListeners();
+  }
 
   /// Identifies the transfer between the two devices.
   final String sessionId;
