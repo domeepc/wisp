@@ -29,19 +29,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # tool/version.sh counts the commits.
+          fetch-depth: 0
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
       - run: flutter pub get
       - run: flutter test
-      # Tagged: the web app shows the same version as the installed apps.
-      - run: |
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
-            version="${GITHUB_REF_NAME#v}"
-            export BUILD_NAME="${version%%-*}"
-          fi
-          ./tool/build_web_app.sh
+      - run: ./tool/build_web_app.sh
       - uses: actions/upload-artifact@v4
         with:
           name: webapp
@@ -64,15 +61,15 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # tool/version.sh counts the commits.
+          fetch-depth: 0
 
       - name: Version
         shell: bash
         run: |
-          if [[ "$GITHUB_REF_TYPE" == tag ]]; then
-            version="${GITHUB_REF_NAME#v}"
-          else
-            version="$(sed -n 's/^version: *\([^+]*\).*/\1/p' pubspec.yaml)-dev.$GITHUB_RUN_NUMBER"
-          fi
+          version="$(./tool/version.sh)"
+          [[ "$GITHUB_REF_TYPE" == tag ]] || version="$version-dev"
           # Platforms want plain numbers (1.2.0) inside the app.
           echo "VERSION=$version" >> "$GITHUB_ENV"
           echo "BUILD_NAME=${version%%-*}" >> "$GITHUB_ENV"
