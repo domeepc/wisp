@@ -2,16 +2,23 @@ import 'dart:io';
 
 import 'package:desktop_drop/desktop_drop.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 
 import '../models/shared_file.dart';
 import '../widgets/text_input_dialog.dart';
+import 'web_pick_stub.dart' if (dart.library.js_interop) 'web_pick_web.dart';
+
+export 'web_pick_stub.dart'
+    if (dart.library.js_interop) 'web_pick_web.dart'
+    show trackTaps;
 
 /// Opens the system file picker. [media] limits it to photos and videos.
 /// Returns an empty list if the user cancels.
 Future<List<SharedFile>> pickFiles({bool media = false}) async {
+  if (kIsWeb) return pickWebFiles(media: media);
   final picked = await FilePicker.pickFiles(
     type: media ? FileType.media : FileType.any,
   );

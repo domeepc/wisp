@@ -10,10 +10,12 @@ import 'theme/app_theme.dart';
 import 'models/transfer.dart';
 import 'screens/transfer_screen.dart';
 import 'utils/notices.dart';
+import 'utils/pick_files.dart' show trackTaps;
 import 'widgets/toasts.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
+  trackTaps(); // browser only: where to open the file picker
   final service = WispService(prefs: SharedPreferencesAsync())..start();
   runApp(WispApp(service: service));
 }
