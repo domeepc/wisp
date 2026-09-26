@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Wisp</title>
+  <link rel="stylesheet" href="/web/style.css">
+  <script src="/web/app.js" defer></script>
+</head>
+<body>
+  <header class="top">
+    <div class="brand">
+      <span class="logo">Wisp</span>
+      <span class="tagline">in your browser — nothing to install</span>
+    </div>
+    <div id="status" class="pill" role="status">
+      <span class="dot"></span>
+      <span id="status-text">Connecting…</span>
+    </div>
+  </header>
+
+  <main class="grid">
+    <section class="col">
+      <h1 id="send-title">Send</h1>
+
+      <div id="drop" class="drop">
+        <div class="drop-icon">
+          <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor"
+               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M12 3v12"/><path d="m7 8 5-5 5 5"/>
+            <path d="M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4"/>
+          </svg>
+        </div>
+        <p class="drop-title">Drop files here</p>
+        <p class="muted">They go straight to the other device over your Wi-Fi.</p>
+        <div class="buttons">
+          <button id="choose" class="btn btn-primary" type="button">Choose files</button>
+          <button id="send-text" class="btn" type="button">Send text</button>
+        </div>
+        <input id="file-input" type="file" multiple hidden>
+      </div>
+
+      <p id="hidden-note" class="note-warn" hidden></p>
+      <div id="outgoing" class="card outgoing" hidden></div>
+
+      <p class="muted small me">
+        You appear as <b id="me-name">…</b> ·
+        <button id="rename" class="link" type="button">Rename</button>
+      </p>
+    </section>
+
+    <section class="col">
+      <div class="col-head">
+        <h1>Shared with you</h1>
+        <button id="download-all" class="btn btn-dark" type="button" hidden>Download all</button>
+      </div>
+
+      <div id="inbox" class="card list" hidden></div>
+      <div id="inbox-empty" class="card empty">
+        <p class="muted">Nothing yet. Files sent to you from
+          <span class="host-name">the other device</span> show up here.</p>
+      </div>
+
+      <div class="card note">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+        </svg>
+        <span>Files never leave your network. The Wisp apps encrypt their transfers, but
+          the browser page can't, so use it on Wi-Fi you trust. Close this tab to
+          disconnect.</span>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="text-dialog">
+    <h2>Send text</h2>
+    <textarea id="text-input" rows="6" placeholder="Type or paste text"></textarea>
+    <div class="dialog-buttons">
+      <button id="text-cancel" class="btn" type="button">Cancel</button>
+      <button id="text-send" class="btn btn-primary" type="button">Send</button>
+    </div>
+  </dialog>
+
+  <div id="toast" class="toast" role="alert" hidden></div>
+</body>
+</html>
