@@ -182,14 +182,14 @@ class BrowserBridge {
       ..headers.set('Referrer-Policy', 'no-referrer')
       // Looser than the page's: Flutter compiles WebAssembly and sets
       // inline styles, and the app talks to the other devices (plain http
-      // on the LAN), the signaling server, and fetches fonts when there's
-      // internet.
+      // on the LAN), the signaling server, reads picked files (blob: URLs),
+      // and fetches fonts when there's internet.
       ..headers.set(
         'Content-Security-Policy',
         "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; "
             "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
             "font-src 'self' data:; "
-            "connect-src 'self' http: wss: https://fonts.gstatic.com; "
+            "connect-src 'self' blob: http: wss: https://fonts.gstatic.com; "
             "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; "
             "frame-ancestors 'none'; form-action 'none'",
       )

@@ -291,6 +291,11 @@ void main() {
       index.headers.value('content-security-policy'),
       contains("'wasm-unsafe-eval'"),
     );
+    // Picked files are read through blob: URLs.
+    expect(
+      index.headers.value('content-security-policy'),
+      contains("connect-src 'self' blob:"),
+    );
 
     final wasm = await call('GET', '/app/canvaskit/canvaskit.wasm');
     expect(wasm.headers.contentType?.mimeType, 'application/wasm');
