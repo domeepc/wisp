@@ -26,7 +26,7 @@ class SearchingCard extends StatelessWidget {
       (title, hint) = (
         'Connect to a Wisp device',
         'A browser can\'t find devices by itself. On the other device, open '
-            'Connect with code and type the browser address it shows.',
+            'Connect with code and type the code it shows.',
       );
     } else {
       leading = const SizedBox.square(

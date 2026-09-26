@@ -249,10 +249,10 @@ void main() {
     await tester.tap(find.text('Connect'));
     await tester.pumpAndSettle();
 
-    expect(find.text('That doesn\'t look like a code.'), findsOneWidget);
+    expect(find.textContaining('doesn\'t look right'), findsOneWidget);
   });
 
-  testWidgets('connect dialog offers the browser address and QR', (
+  testWidgets('connect dialog shows a code and a QR, never the IP', (
     tester,
   ) async {
     final service = _service()
@@ -264,8 +264,9 @@ void main() {
     await tester.tap(find.text('Connect with code'));
     await tester.pump(const Duration(seconds: 1));
 
-    expect(find.text('http://192.168.1.24:53319'), findsOneWidget);
+    expect(find.text(service.connectCode!), findsOneWidget);
     expect(find.byType(QrImageView), findsOneWidget);
+    expect(find.textContaining('192.168'), findsNothing);
   });
 
   testWidgets('sending to a browser waits for the download', (tester) async {
@@ -289,8 +290,105 @@ void main() {
     expect(find.text('Connect to a Wisp device'), findsOneWidget);
     await tester.tap(find.widgetWithText(FilledButton, 'Connect'));
     await tester.pump(const Duration(seconds: 1));
-    expect(find.text('Its browser address'), findsOneWidget);
+    expect(find.text('Other device\'s code'), findsOneWidget);
     expect(find.text('THIS DEVICE\'S CODE'), findsNothing);
+  });
+
+  group('toasts', () {
+    // A toast's animation starts on the frame it first appears.
+    Future<void> settle(WidgetTester tester) async {
+      await tester.pump();
+      await tester.pump(const Duration(milliseconds: 300));
+    }
+
+    testWidgets('incoming files: live progress, then done', (tester) async {
+      final service = _service();
+      await _pumpApp(tester, _phone, service);
+      debugPrint('step 1');
+      final t = Transfer(
+        direction: TransferDirection.receive,
+        peer: _devices.first,
+        files: _files,
+        securityCode: 'AB12',
+        saveDir: '/tmp',
+      )..setStatus(TransferStatus.running);
+      service.addTransfer(t);
+      debugPrint('step 2');
+      await settle(tester);
+      debugPrint('step 3');
+
+      expect(find.text('Receiving 3 files'), findsOneWidget);
+      // Stays while it's running.
+      await tester.pump(const Duration(seconds: 10));
+      debugPrint('step 4');
+      expect(find.text('Receiving 3 files'), findsOneWidget);
+
+      for (final (i, f) in _files.indexed) {
+        t.setFileProgress(i, f.bytes);
+      }
+      t.setStatus(TransferStatus.done);
+      await settle(tester);
+      debugPrint('step 5');
+      expect(find.text('Received 3 files'), findsOneWidget);
+      expect(find.text('Show in folder'), findsOneWidget);
+      expect(find.widgetWithText(TextButton, 'View'), findsOneWidget);
+
+      // Then goes away by itself.
+      await tester.pump(const Duration(seconds: 8));
+      debugPrint('step 6');
+      await settle(tester);
+      debugPrint('step 7 ${find.text('Received 3 files').evaluate().length}');
+      expect(find.text('Received 3 files'), findsNothing);
+      debugPrint('step 8');
+      await tester.pumpWidget(const SizedBox());
+      debugPrint('step 9');
+      await tester.pump(const Duration(seconds: 1));
+      debugPrint('step 10');
+    });
+
+    testWidgets('someone opening Wisp in a browser', (tester) async {
+      final service = _service(withDevices: false);
+      await _pumpApp(tester, _phone, service);
+
+      service.addDevice(_devices.last);
+      await settle(tester);
+
+      expect(find.text('iPad joined from a browser'), findsOneWidget);
+      await tester.tap(find.byTooltip('Dismiss'));
+      await settle(tester);
+      expect(find.text('iPad joined from a browser'), findsNothing);
+    });
+
+    testWidgets('devices on the Wi-Fi don\'t get one', (tester) async {
+      final service = _service(withDevices: false);
+      await _pumpApp(tester, _phone, service);
+
+      service.addDevice(_devices.first);
+      await settle(tester);
+
+      expect(find.textContaining('MacBook Pro'), findsOneWidget); // the list
+      expect(find.byTooltip('Dismiss'), findsNothing);
+    });
+
+    testWidgets('a send that finished off screen', (tester) async {
+      final service = _service();
+      await _pumpApp(tester, _desktop, service);
+      final t = Transfer(
+        direction: TransferDirection.send,
+        peer: _devices.first,
+        files: [_files.last],
+        securityCode: 'AB12',
+      )..setStatus(TransferStatus.running);
+      service.addTransfer(t);
+      await settle(tester);
+      expect(find.byTooltip('Dismiss'), findsNothing); // its screen shows it
+
+      t.setStatus(TransferStatus.declined);
+      await settle(tester);
+      expect(find.text('MacBook Pro declined notes.pdf'), findsWidgets);
+      expect(find.byTooltip('Dismiss'), findsOneWidget);
+      await tester.pump(const Duration(seconds: 5));
+    });
   });
 }
 

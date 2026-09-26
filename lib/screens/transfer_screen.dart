@@ -9,8 +9,38 @@ import '../utils/open_folder.dart';
 import '../utils/transfer_text.dart';
 
 /// Page 3: live progress of one transfer, sending or receiving.
-class TransferScreen extends StatelessWidget {
+class TransferScreen extends StatefulWidget {
   const TransferScreen({super.key, required this.transfer});
+
+  final Transfer transfer;
+
+  /// Transfers whose screen is open, so a toast doesn't repeat it.
+  static final showing = <Transfer>{};
+
+  @override
+  State<TransferScreen> createState() => _TransferScreenState();
+}
+
+class _TransferScreenState extends State<TransferScreen> {
+  @override
+  void initState() {
+    super.initState();
+    TransferScreen.showing.add(widget.transfer);
+  }
+
+  @override
+  void dispose() {
+    TransferScreen.showing.remove(widget.transfer);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      _TransferView(transfer: widget.transfer);
+}
+
+class _TransferView extends StatelessWidget {
+  const _TransferView({required this.transfer});
 
   final Transfer transfer;
 

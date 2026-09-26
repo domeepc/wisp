@@ -12,6 +12,8 @@ import '../widgets/device_list_tile.dart';
 import '../widgets/searching_card.dart';
 import '../widgets/section_label.dart';
 import '../widgets/settings_button.dart';
+import '../widgets/toasts.dart';
+import '../widgets/wisp_logo.dart';
 import '../widgets/status_dot.dart';
 import '../widgets/this_device_card.dart';
 import '../widgets/transfer_icon.dart';
@@ -35,11 +37,11 @@ class HomeScreen extends StatelessWidget {
 }
 
 /// Status line under this device's name.
-String visibilityLabel(WispService service, {bool showAddress = false}) {
+String visibilityLabel(WispService service, {bool showCode = false}) {
   if (service.startError != null) return 'Offline · network error';
   if (!service.running) return 'Starting…';
   if (service.isWebClient) return connectedLabel(service.devices.length);
-  if (showAddress) return 'Visible · ${service.localAddress ?? 'no network'}';
+  if (showCode) return 'Visible · code ${service.connectCode ?? '—'}';
   return 'Visible · ready to receive';
 }
 
@@ -98,13 +100,11 @@ class _MobileHomeState extends State<MobileHome> {
 
   void _snack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    Toasts.of(context).message(message);
   }
 
   @override
   Widget build(BuildContext context) {
-    final text = Theme.of(context).textTheme;
     final service = WispScope.of(context);
     final devices = service.devices;
     final latest = service.transfers.lastOrNull;
@@ -135,7 +135,7 @@ class _MobileHomeState extends State<MobileHome> {
           children: [
             Row(
               children: [
-                Text('Wisp', style: text.headlineMedium),
+                const WispWordmark(),
                 const Spacer(),
                 const SettingsButton(),
               ],

@@ -8,6 +8,8 @@ import '../utils/open_folder.dart';
 import '../utils/pick_files.dart';
 import '../widgets/device_avatar.dart';
 import '../widgets/section_label.dart';
+import '../widgets/toasts.dart';
+import '../widgets/wisp_logo.dart';
 import '../widgets/text_input_dialog.dart';
 
 /// Device name, where files are saved, trusted devices.
@@ -31,8 +33,11 @@ class SettingsScreen extends StatelessWidget {
     if (dir == null) return;
     final ok = await service.setSaveDir(dir);
     if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Wisp can\'t save files in that folder')),
+      Toasts.of(context).message(
+        'Wisp can\'t save files in that folder',
+        subtitle: 'Pick another one',
+        icon: Icons.folder_off_outlined,
+        tone: ToastTone.error,
       );
     }
   }
@@ -84,14 +89,19 @@ class SettingsScreen extends StatelessWidget {
                                 ),
                         ),
                       ],
-                      if (service.browserUrl case final url?) ...[
+                      // The link has the address in it, so it's copied,
+                      // not shown.
+                      if (service.webAppUrl ?? service.browserUrl
+                          case final url?) ...[
                         const Divider(),
                         ListTile(
-                          title: const Text('Browser address'),
-                          subtitle: Text('$url — for devices without Wisp'),
+                          title: const Text('Link for browsers'),
+                          subtitle: const Text(
+                            'Opens Wisp on devices without the app',
+                          ),
                           trailing: IconButton(
-                            tooltip: 'Copy',
-                            icon: const Icon(Icons.copy_outlined),
+                            tooltip: 'Copy link',
+                            icon: const Icon(Icons.link),
                             onPressed: () =>
                                 Clipboard.setData(ClipboardData(text: url)),
                           ),
@@ -150,7 +160,14 @@ class SettingsScreen extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: .start,
                       children: [
-                        Text('Wisp', style: text.titleMedium),
+                        Row(
+                          children: [
+                            const WispLogo(size: 24),
+                            const SizedBox(width: AppSpacing.sm),
+                            Text('Wisp', style: text.titleMedium),
+                          ],
+                        ),
+                        const SizedBox(height: AppSpacing.sm),
                         Text(
                           'Protocol $protocolVersion. Files go straight between your '
                           'devices over your Wi-Fi. Transfers between Wisp apps '

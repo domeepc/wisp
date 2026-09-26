@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -6,6 +7,8 @@ import '../models/device.dart';
 import '../services/wisp_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
+import '../utils/notices.dart';
+import 'toasts.dart';
 
 /// "Connect with code": shows this device's code and lets the user type
 /// the other device's, for when it doesn't show up by itself. Shows a
@@ -16,8 +19,12 @@ Future<void> connectWithCode(BuildContext context) async {
     builder: (_) => const _ConnectDialog(),
   );
   if (device == null || !context.mounted) return;
-  ScaffoldMessenger.of(context)
-      .showSnackBar(SnackBar(content: Text('Connected to ${device.name}')));
+  showDeviceToast(
+    Toasts.of(context),
+    device,
+    'Connected to ${device.name}',
+    ToastTone.success,
+  );
 }
 
 class _ConnectDialog extends StatefulWidget {
@@ -59,7 +66,6 @@ class _ConnectDialogState extends State<_ConnectDialog> {
     final text = Theme.of(context).textTheme;
     final service = WispScope.of(context);
     final myCode = service.connectCode;
-    final lastNumber = service.localAddress?.split('.').last;
     // A browser has no code of its own; it can only connect out.
     final web = service.isWebClient;
 
@@ -74,8 +80,7 @@ class _ConnectDialogState extends State<_ConnectDialog> {
             if (web)
               Text(
                 'On the other device, open Connect with code and type the '
-                'browser address it shows under “No app on the other '
-                'device?”.',
+                'code it shows.',
                 style: text.bodyMedium,
               )
             else ...[
@@ -110,29 +115,22 @@ class _ConnectDialogState extends State<_ConnectDialog> {
               controller: _controller,
               autofocus: true,
               enabled: !_busy,
-              keyboardType: TextInputType.url,
+              keyboardType: TextInputType.visiblePassword, // no autocorrect
               textInputAction: TextInputAction.go,
+              textCapitalization: TextCapitalization.characters,
               onSubmitted: (_) => _connect(),
               decoration: InputDecoration(
-                labelText: web ? 'Its browser address' : 'Other device\'s code',
-                hintText: 'e.g. 192.168.1.24',
+                labelText: 'Other device\'s code',
+                hintText: 'e.g. 7K3M-Q2XA',
                 errorText: _error,
                 errorMaxLines: 3,
               ),
             ),
-            if (lastNumber != null) ...[
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'On the same Wi-Fi the last number is enough '
-                '(this device is $lastNumber).',
-                style: text.bodySmall,
-              ),
-            ],
             if (service.browserUrl case final url?) ...[
               const SizedBox(height: AppSpacing.xl),
               const Divider(),
               const SizedBox(height: AppSpacing.lg),
-              BrowserAddress(url: url),
+              BrowserAddress(url: service.webAppUrl ?? url, pageUrl: url),
             ],
           ],
         ),
@@ -159,16 +157,30 @@ class _ConnectDialogState extends State<_ConnectDialog> {
   }
 }
 
-/// "No app on the other device?" — this device's address for a browser,
-/// with a QR code phones can scan.
-class BrowserAddress extends StatelessWidget {
-  const BrowserAddress({super.key, required this.url});
+/// "No app on the other device?" — a QR code that opens Wisp in its
+/// browser. The link has this device's address in it, so it's scanned or
+/// copied rather than shown. [url] is the web app when it's built in
+/// (it connects by itself); [pageUrl] is the simple page, for older
+/// browsers.
+class BrowserAddress extends StatefulWidget {
+  const BrowserAddress({super.key, required this.url, this.pageUrl});
 
   final String url;
+  final String? pageUrl;
+
+  @override
+  State<BrowserAddress> createState() => _BrowserAddressState();
+}
+
+class _BrowserAddressState extends State<BrowserAddress> {
+  bool _simple = false;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
+    final page = widget.pageUrl;
+    final hasSimple = page != null && page != widget.url;
+    final url = _simple && hasSimple ? page : widget.url;
 
     return Row(
       children: [
@@ -183,7 +195,7 @@ class BrowserAddress extends StatelessWidget {
             data: url,
             size: 104,
             padding: const EdgeInsets.all(AppSpacing.xs),
-            semanticsLabel: 'QR code for $url',
+            semanticsLabel: 'QR code that opens Wisp in a browser',
           ),
         ),
         const SizedBox(width: AppSpacing.lg),
@@ -194,13 +206,28 @@ class BrowserAddress extends StatelessWidget {
               Text('No app on the other device?', style: text.titleSmall),
               const SizedBox(height: AppSpacing.xs),
               Text(
-                'Open this in its browser, or scan the code with its camera:',
+                'Scan this with its camera to open Wisp in its browser.',
                 style: text.bodySmall,
               ),
               const SizedBox(height: AppSpacing.xs),
-              SelectableText(
-                url,
-                style: text.bodyMedium?.copyWith(color: AppColors.accent),
+              Wrap(
+                spacing: AppSpacing.sm,
+                children: [
+                  TextButton.icon(
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: url));
+                      Toasts.of(context)
+                          .message('Link copied', icon: Icons.link);
+                    },
+                    icon: const Icon(Icons.link, size: 18),
+                    label: const Text('Copy link'),
+                  ),
+                  if (hasSimple)
+                    TextButton(
+                      onPressed: () => setState(() => _simple = !_simple),
+                      child: Text(_simple ? 'Full app' : 'Simple page'),
+                    ),
+                ],
               ),
             ],
           ),

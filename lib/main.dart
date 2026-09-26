@@ -7,7 +7,10 @@ import 'screens/home_screen.dart';
 import 'screens/incoming_sheet.dart';
 import 'services/wisp_service.dart';
 import 'theme/app_theme.dart';
-import 'utils/transfer_text.dart';
+import 'models/transfer.dart';
+import 'screens/transfer_screen.dart';
+import 'utils/notices.dart';
+import 'widgets/toasts.dart';
 
 void main() {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,19 +29,33 @@ class WispApp extends StatefulWidget {
 
 class _WispAppState extends State<WispApp> {
   final _navigatorKey = GlobalKey<NavigatorState>();
-  final _messengerKey = GlobalKey<ScaffoldMessengerState>();
+  final _toasts = ToastController();
   late final StreamSubscription<IncomingRequest> _incoming;
+  late final _notices = Notices(
+    service: widget.service,
+    toasts: _toasts,
+    openTransfer: _openTransfer,
+  );
 
   @override
   void initState() {
     super.initState();
     _incoming = widget.service.incoming.listen(_onIncoming);
+    _notices; // starts listening
   }
 
   @override
   void dispose() {
     _incoming.cancel();
+    _notices.dispose();
+    _toasts.dispose();
     super.dispose();
+  }
+
+  void _openTransfer(Transfer transfer) {
+    final context = _navigatorKey.currentContext;
+    if (context == null || TransferScreen.showing.contains(transfer)) return;
+    openTransfer(context, transfer);
   }
 
   /// Someone wants to send us files: ask, wherever the user currently is.
@@ -46,23 +63,8 @@ class _WispAppState extends State<WispApp> {
     final context = _navigatorKey.currentContext;
     if (context == null) return request.decline();
 
-    final accepted = await showIncomingSheet(context, request: request);
-    if (!accepted) return;
-
-    final transfer = await request.transfer;
-    if (transfer == null || !mounted) return;
-    _messengerKey.currentState?.showSnackBar(
-      SnackBar(
-        content: Text(transferTitle(transfer)),
-        action: SnackBarAction(
-          label: 'View',
-          onPressed: () {
-            final context = _navigatorKey.currentContext;
-            if (context != null) openTransfer(context, transfer);
-          },
-        ),
-      ),
-    );
+    // Once accepted, a toast follows the transfer (see Notices).
+    await showIncomingSheet(context, request: request);
   }
 
   @override
@@ -74,7 +76,8 @@ class _WispAppState extends State<WispApp> {
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         navigatorKey: _navigatorKey,
-        scaffoldMessengerKey: _messengerKey,
+        builder: (context, child) =>
+            ToastHost(controller: _toasts, child: child!),
         home: const HomeScreen(),
       ),
     );

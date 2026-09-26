@@ -20,6 +20,8 @@ import '../widgets/file_type_badge.dart';
 import '../widgets/searching_card.dart';
 import '../widgets/section_label.dart';
 import '../widgets/settings_button.dart';
+import '../widgets/toasts.dart';
+import '../widgets/wisp_logo.dart';
 import '../widgets/status_dot.dart';
 import '../widgets/this_device_card.dart';
 import '../widgets/transfer_icon.dart';
@@ -43,8 +45,10 @@ class _DesktopHomeState extends State<DesktopHome> {
       if (mounted) setState(() => _selected.addAll(files));
     } on Exception {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Couldn\'t open the file picker')),
+      Toasts.of(context).message(
+        'Couldn\'t open the file picker',
+        icon: Icons.error_outline,
+        tone: ToastTone.error,
       );
     }
   }
@@ -83,7 +87,7 @@ class _DesktopHomeState extends State<DesktopHome> {
       children: [
         Row(
           children: [
-            Text('Wisp', style: text.headlineMedium),
+            const WispWordmark(),
             const Spacer(),
             const SettingsButton(),
           ],
@@ -92,7 +96,7 @@ class _DesktopHomeState extends State<DesktopHome> {
         ThisDeviceCard(
           device: service.self,
           visible: service.visible,
-          visibleLabel: visibilityLabel(service, showAddress: true),
+          visibleLabel: visibilityLabel(service, showCode: true),
           color: AppColors.background,
           online: service.running,
           onVisibleChanged: (v) => service.visible = v,
