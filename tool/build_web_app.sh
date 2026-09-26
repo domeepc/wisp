@@ -12,7 +12,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 out="$PWD/build/web_app"
 
-flutter build web --release --base-href /app/ --no-web-resources-cdn --output "$out" \
+flutter build web --release --wasm --base-href /app/ --no-web-resources-cdn --output "$out" \
   --dart-define=SIGNALING_URL="${SIGNALING_URL:-}"
 # The web build bundles the app's assets too, including the previous zip.
 rm -rf "$out/assets/assets/webapp"
