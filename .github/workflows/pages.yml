@@ -21,6 +21,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          # tool/version.sh counts the commits.
+          fetch-depth: 0
       - uses: subosito/flutter-action@v2
         with:
           flutter-version: 3.47.5
@@ -29,12 +32,14 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      # Pages serves the site under /<repository name>/.
+      # Pages serves the site under /<repository name>/, and shows the
+      # version tool/version.sh prints (1.0.<commits>).
       # SIGNALING_URL: repository Settings → Secrets and variables → Actions
       # → Variables (the deployed server/, e.g. wss://wisp-signal.you.workers.dev).
       - run: >-
           flutter build web --release --wasm
           --base-href "/${{ github.event.repository.name }}/"
+          --build-name "$(./tool/version.sh)"
           --dart-define=SIGNALING_URL=${{ vars.SIGNALING_URL }}
       - uses: actions/upload-pages-artifact@v3
         with:

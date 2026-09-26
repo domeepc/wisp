@@ -8,13 +8,16 @@
 # GitHub Pages build (which needs a different base path).
 # Set SIGNALING_URL to the signaling server (server/) to find devices
 # through the internet too. Set BUILD_NAME (1.2.0) to show that version
-# instead of pubspec.yaml's.
+# instead of tool/version.sh's.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 out="$PWD/build/web_app"
+version="$(./tool/version.sh)"
+# Platforms want plain numbers (1.2.0) inside the app.
+BUILD_NAME="${BUILD_NAME:-${version%%-*}}"
 
 flutter build web --release --wasm --base-href /app/ --no-web-resources-cdn --output "$out" \
-  ${BUILD_NAME:+--build-name "$BUILD_NAME"} \
+  --build-name "$BUILD_NAME" \
   --dart-define=SIGNALING_URL="${SIGNALING_URL:-}"
 # The web build bundles the app's assets too, including the previous zip.
 rm -rf "$out/assets/assets/webapp"
