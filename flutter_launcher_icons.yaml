@@ -1,0 +1,20 @@
+# Regenerate with: dart run flutter_launcher_icons
+# Source art is in assets/brand/ (wisp_icon.svg is the master).
+flutter_launcher_icons:
+  image_path: "assets/brand/app_icon.png"
+  android: true
+  adaptive_icon_background: "#2F4BFF"
+  adaptive_icon_foreground: "assets/brand/app_icon_foreground.png"
+  ios: true
+  image_path_ios: "assets/brand/app_icon_ios.png"
+  remove_alpha_ios: true
+  web:
+    generate: true
+    background_color: "#F3F2EE"
+    theme_color: "#2F4BFF"
+  windows:
+    generate: true
+    icon_size: 256
+  macos:
+    generate: true
+    image_path: "assets/brand/app_icon_macos.png"
