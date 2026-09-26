@@ -304,7 +304,6 @@ void main() {
     testWidgets('incoming files: live progress, then done', (tester) async {
       final service = _service();
       await _pumpApp(tester, _phone, service);
-      debugPrint('step 1');
       final t = Transfer(
         direction: TransferDirection.receive,
         peer: _devices.first,
@@ -313,14 +312,11 @@ void main() {
         saveDir: '/tmp',
       )..setStatus(TransferStatus.running);
       service.addTransfer(t);
-      debugPrint('step 2');
       await settle(tester);
-      debugPrint('step 3');
 
       expect(find.text('Receiving 3 files'), findsOneWidget);
       // Stays while it's running.
       await tester.pump(const Duration(seconds: 10));
-      debugPrint('step 4');
       expect(find.text('Receiving 3 files'), findsOneWidget);
 
       for (final (i, f) in _files.indexed) {
@@ -328,22 +324,14 @@ void main() {
       }
       t.setStatus(TransferStatus.done);
       await settle(tester);
-      debugPrint('step 5');
       expect(find.text('Received 3 files'), findsOneWidget);
       expect(find.text('Show in folder'), findsOneWidget);
       expect(find.widgetWithText(TextButton, 'View'), findsOneWidget);
 
       // Then goes away by itself.
       await tester.pump(const Duration(seconds: 8));
-      debugPrint('step 6');
       await settle(tester);
-      debugPrint('step 7 ${find.text('Received 3 files').evaluate().length}');
       expect(find.text('Received 3 files'), findsNothing);
-      debugPrint('step 8');
-      await tester.pumpWidget(const SizedBox());
-      debugPrint('step 9');
-      await tester.pump(const Duration(seconds: 1));
-      debugPrint('step 10');
     });
 
     testWidgets('someone opening Wisp in a browser', (tester) async {
