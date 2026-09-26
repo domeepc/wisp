@@ -93,7 +93,7 @@ class WispService extends ChangeNotifier {
   final int port;
   final int pagePort;
 
-  /// The port the browser page is actually on, once started.
+  /// The port browsers use (the web app), once started.
   int? browserPort;
 
   /// Where settings are saved. Null means nothing is remembered (tests).
@@ -159,7 +159,7 @@ class WispService extends ChangeNotifier {
     )..start();
   }
 
-  /// Nearby devices running Wisp, plus browsers that have the page open.
+  /// Nearby devices running Wisp, plus browsers that have the web app open.
   List<Device> get devices => switch (_web) {
     // Devices we're linked to directly win over the same ones in the room.
     final web? => [
@@ -210,19 +210,9 @@ class WispService extends ChangeNotifier {
       await _loadSettings();
       saveDir ??= await _defaultSaveDir();
       try {
-        final files = await _loadWebFiles();
-        const app = 'app/';
-        _browsers
-          ..webFiles = {
-            for (final MapEntry(:key, :value) in files.entries)
-              if (!key.startsWith(app)) key: value,
-          }
-          ..appFiles = {
-            for (final MapEntry(:key, :value) in files.entries)
-              if (key.startsWith(app)) key.substring(app.length): value,
-          };
+        _browsers.appFiles = await _loadWebFiles();
       } catch (_) {
-        // No page for browsers, but everything else still works.
+        // No web app for browsers, but everything else still works.
       }
       localAddress = await _findLocalAddress();
       final identity = await _loadIdentity();
@@ -331,22 +321,14 @@ class WispService extends ChangeNotifier {
   }
 
   /// The address to open in a browser on another device, e.g.
-  /// `http://192.168.1.24:53319`.
+  /// `http://192.168.1.24:53319`: it opens the web app, which connects to
+  /// this device by itself (built in by tool/build_web_app.sh).
   String? get browserUrl {
     final address = localAddress;
     final port = browserPort;
     if (address == null || port == null) return null;
     return 'http://$address:$port';
   }
-
-  /// The Flutter web app on this device, e.g.
-  /// `http://192.168.1.24:53319/app/`. Opened from there, it connects to
-  /// this device by itself. Null unless it was built in (see
-  /// tool/build_web_app.sh).
-  String? get webAppUrl => switch (browserUrl) {
-    final url? when _browsers.appFiles.isNotEmpty => '$url/app/',
-    _ => null,
-  };
 
   /// Connects to a device by its code (see [parseConnectCode]), for when
   /// discovery doesn't find it. Throws [ConnectException] with a message
@@ -617,20 +599,11 @@ class WispService extends ChangeNotifier {
   String get saveDirName =>
       saveDir == null ? 'Downloads' : p.basename(saveDir!);
 
-  /// The browser page's files, plus the web app's under `app/` if
-  /// tool/build_web_app.sh packed it in.
+  /// The web app's files (path → contents), packed in by
+  /// tool/build_web_app.sh.
   static Future<Map<String, List<int>>> _loadBundledWebFiles() async {
-    final files = <String, List<int>>{
-      for (final name in webFileNames)
-        name: (await rootBundle.load('assets/web/$name')).buffer.asUint8List(),
-    };
-    try {
-      final zip = await rootBundle.load('assets/webapp/webapp.zip');
-      files.addAll(await compute(_unzipWebApp, zip.buffer.asUint8List()));
-    } catch (_) {
-      // Not built in: only the page is served.
-    }
-    return files;
+    final zip = await rootBundle.load('assets/webapp/webapp.zip');
+    return compute(_unzipWebApp, zip.buffer.asUint8List());
   }
 
   static DevicePlatform _currentPlatform() {
@@ -727,5 +700,5 @@ abstract final class _Keys {
 
 Map<String, List<int>> _unzipWebApp(Uint8List zip) => {
   for (final file in ZipDecoder().decodeBytes(zip))
-    if (file.isFile) 'app/${file.name}': file.content,
+    if (file.isFile) file.name: file.content,
 };

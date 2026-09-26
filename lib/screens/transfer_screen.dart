@@ -160,7 +160,7 @@ class _TransferView extends StatelessWidget {
             children: [
               Expanded(
                 child: Text(
-                  'It\'s waiting under “Shared with you” on ${t.peer.name}. '
+                  '${t.peer.name} is asked in their browser. '
                   'It\'s sent once they download it.',
                   style: text.bodyLarge,
                   textAlign: .center,

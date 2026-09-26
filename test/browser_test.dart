@@ -11,7 +11,7 @@ import 'package:wisp/net/http_utils.dart';
 import 'package:wisp/net/protocol.dart';
 import 'package:wisp/services/wisp_service.dart';
 
-/// Talks to a real [WispService] the way the browser page's app.js does.
+/// Talks to a real [WispService] the way the web app in a browser does.
 void main() {
   late Directory tmp;
   late WispService service;
@@ -23,12 +23,10 @@ void main() {
       saveDir: tmp.path,
       port: 0,
       pagePort: 0,
+      // A stand-in for the web app tool/build_web_app.sh packs in.
       loadWebFiles: () async => {
-        for (final name in webFileNames)
-          name: File('assets/web/$name').readAsBytesSync(),
-        // A stand-in for the web app tool/build_web_app.sh packs in.
-        'app/index.html': utf8.encode('<title>Wisp</title>'),
-        'app/canvaskit/canvaskit.wasm': [0, 97, 115, 109],
+        'index.html': utf8.encode('<title>Wisp</title>'),
+        'canvaskit/canvaskit.wasm': [0, 97, 115, 109],
       },
     );
     await service.start(discovery: false);
@@ -95,24 +93,6 @@ void main() {
       (await callJson('GET', '${BrowserApi.inbox}?$auth'))['items']
           as List<dynamic>;
 
-  test('serves the page with a strict security policy', () async {
-    final page = await call('GET', '/');
-    expect(page.status, 200);
-    expect(page.headers.contentType?.mimeType, 'text/html');
-    expect(
-      page.headers.value('content-security-policy'),
-      contains("script-src 'self'"),
-    );
-    expect(utf8.decode(page.body), contains('Shared with you'));
-
-    final script = await call('GET', '/web/app.js');
-    expect(script.status, 200);
-    expect(script.headers.contentType?.mimeType, 'text/javascript');
-
-    expect((await call('GET', '/web/nope.js')).status, 404);
-    expect((await call('GET', '/web/../pubspec.yaml')).status, 404);
-  });
-
   test('a browser shows up as a device and leaves on bye', () async {
     final auth = await hello(name: 'iPad', detail: 'Safari');
 
@@ -155,7 +135,6 @@ void main() {
 
     final items = await inbox(auth);
     expect(items.single['name'], 'report.pdf');
-    expect(items.single['kind'], 'file');
     expect(items.single['size'], 200000);
 
     final download = await call(
@@ -171,18 +150,6 @@ void main() {
     );
     expect(transfer.status, TransferStatus.done);
     expect(transfer.progress, 1);
-  });
-
-  test('text shows up inline and counts as delivered', () async {
-    final auth = await hello();
-    final transfer = service.send(service.devices.single, [
-      SharedFile.text('https://github.com/\nsecond line'),
-    ]);
-
-    final item = (await inbox(auth)).single;
-    expect(item['kind'], 'text');
-    expect(item['text'], 'https://github.com/\nsecond line');
-    expect(transfer.status, TransferStatus.done);
   });
 
   test('cancelling on the app takes the files back', () async {
@@ -273,15 +240,12 @@ void main() {
   });
 
   test('the web app is served under /app/', () async {
-    service.localAddress = '192.168.1.24';
-    expect(
-      service.webAppUrl,
-      'http://192.168.1.24:${service.browserPort}/app/',
-    );
-
-    final redirect = await call('GET', '/app');
-    expect(redirect.status, 301);
-    expect(redirect.headers.value('location'), '/app/');
+    // The address alone (the QR code) leads there.
+    for (final path in ['/', '/app']) {
+      final redirect = await call('GET', path);
+      expect(redirect.status, 301);
+      expect(redirect.headers.value('location'), '/app/');
+    }
 
     final index = await call('GET', '/app/');
     expect(index.status, 200);
@@ -302,8 +266,7 @@ void main() {
     expect(wasm.body, [0, 97, 115, 109]);
 
     expect((await call('GET', '/app/missing.js')).status, 404);
-    // The simple page is still at the root.
-    expect(utf8.decode((await call('GET', '/')).body), contains('Wisp'));
+    expect((await call('GET', '/app/../pubspec.yaml')).status, 404);
   });
 
   test('a page without a name gets a random one', () async {

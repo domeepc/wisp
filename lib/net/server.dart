@@ -30,7 +30,7 @@ class Offer {
 /// The receiving side: other devices send files here.
 ///
 /// Two listeners: HTTPS for other Wisp apps (everything), and plain HTTP
-/// for browsers (the page plus the upload endpoints — nothing else).
+/// for browsers (the web app plus the upload endpoints — nothing else).
 class WispServer {
   WispServer({
     required this.self,
@@ -40,7 +40,7 @@ class WispServer {
     this.extraRoutes,
   });
 
-  /// Handles requests the file protocol doesn't know (the browser page).
+  /// Handles requests the file protocol doesn't know (the web app).
   /// Returns false to fall through to a 404.
   final Future<bool> Function(HttpRequest req)? extraRoutes;
 
@@ -62,7 +62,7 @@ class WispServer {
   /// The HTTPS port other apps connect to.
   int get port => _secure?.port ?? 0;
 
-  /// The plain-HTTP port for the browser page.
+  /// The plain-HTTP port for browsers.
   int get browserPort => _plain?.port ?? 0;
 
   /// Listens on the given ports, or on any free ones if they're taken

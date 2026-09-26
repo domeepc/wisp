@@ -17,7 +17,7 @@ import 'browser_http.dart';
 ///
 /// A browser can't be discovered and can't run a server, so it connects
 /// out to Wisp devices by their browser address and uses the same API as
-/// the browser page (see browser_bridge.dart): it checks in every couple
+/// the browser API (see browser_bridge.dart): it checks in every couple
 /// of seconds, which keeps it on their device lists; it offers files
 /// through prepare-upload/upload; and files shared with it show up in its
 /// inbox, which become normal incoming requests here.
@@ -208,11 +208,7 @@ class WebLinks {
     if (host == null) return;
     final files = [
       for (final item in items)
-        SharedFile(
-          item['name'] as String,
-          item['size'] as int,
-          text: item['text'] as String?,
-        ),
+        SharedFile(item['name'] as String, item['size'] as int),
     ];
     final transfer = await onOffer(
       Offer(sessionId: batch, from: host, files: files, securityCode: ''),

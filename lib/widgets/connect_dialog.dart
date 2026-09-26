@@ -20,7 +20,7 @@ Future<void> connectWithCode(BuildContext context) async {
   );
   if (device == null || !context.mounted) return;
   showDeviceToast(
-    Toasts.of(context),
+    ToastController.of(context),
     device,
     'Connected to ${device.name}',
     ToastTone.success,
@@ -130,7 +130,7 @@ class _ConnectDialogState extends State<_ConnectDialog> {
               const SizedBox(height: AppSpacing.xl),
               const Divider(),
               const SizedBox(height: AppSpacing.lg),
-              BrowserAddress(url: service.webAppUrl ?? url, pageUrl: url),
+              BrowserAddress(url: url),
             ],
           ],
         ),
@@ -158,29 +158,16 @@ class _ConnectDialogState extends State<_ConnectDialog> {
 }
 
 /// "No app on the other device?" — a QR code that opens Wisp in its
-/// browser. The link has this device's address in it, so it's scanned or
-/// copied rather than shown. [url] is the web app when it's built in
-/// (it connects by itself); [pageUrl] is the simple page, for older
-/// browsers.
-class BrowserAddress extends StatefulWidget {
-  const BrowserAddress({super.key, required this.url, this.pageUrl});
+/// browser, already connected to this device. The link has this device's
+/// address in it, so it's scanned or copied rather than shown.
+class BrowserAddress extends StatelessWidget {
+  const BrowserAddress({super.key, required this.url});
 
   final String url;
-  final String? pageUrl;
-
-  @override
-  State<BrowserAddress> createState() => _BrowserAddressState();
-}
-
-class _BrowserAddressState extends State<BrowserAddress> {
-  bool _simple = false;
 
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final page = widget.pageUrl;
-    final hasSimple = page != null && page != widget.url;
-    final url = _simple && hasSimple ? page : widget.url;
 
     return Row(
       children: [
@@ -210,24 +197,14 @@ class _BrowserAddressState extends State<BrowserAddress> {
                 style: text.bodySmall,
               ),
               const SizedBox(height: AppSpacing.xs),
-              Wrap(
-                spacing: AppSpacing.sm,
-                children: [
-                  TextButton.icon(
-                    onPressed: () {
-                      Clipboard.setData(ClipboardData(text: url));
-                      Toasts.of(context)
-                          .message('Link copied', icon: Icons.link);
-                    },
-                    icon: const Icon(Icons.link, size: 18),
-                    label: const Text('Copy link'),
-                  ),
-                  if (hasSimple)
-                    TextButton(
-                      onPressed: () => setState(() => _simple = !_simple),
-                      child: Text(_simple ? 'Full app' : 'Simple page'),
-                    ),
-                ],
+              TextButton.icon(
+                onPressed: () {
+                  Clipboard.setData(ClipboardData(text: url));
+                  ToastController.of(context)
+                      .message('Link copied', icon: Icons.link);
+                },
+                icon: const Icon(Icons.link, size: 18),
+                label: const Text('Copy link'),
               ),
             ],
           ),

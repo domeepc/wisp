@@ -9,9 +9,6 @@ import '../utils/random_name.dart';
 import 'http_utils.dart';
 import 'protocol.dart';
 
-/// The page's files, as served under `/web/`.
-const webFileNames = ['index.html', 'style.css', 'app.js', 'logo.svg'];
-
 abstract final class BrowserApi {
   static const hello = '/api/wisp/v1/browser/hello';
   static const inbox = '/api/wisp/v1/browser/inbox';
@@ -19,15 +16,11 @@ abstract final class BrowserApi {
   static const bye = '/api/wisp/v1/browser/bye';
 }
 
-/// Text up to this size is shown on the page with a Copy button;
-/// anything bigger is a normal download.
-const _maxInlineText = 100 * 1024;
-
 /// Lets devices without the app use Wisp from a web browser.
 ///
-/// Serves the page at `/`, and keeps a session per open browser tab. The
-/// page checks its inbox every couple of seconds, which is also how the
-/// app knows the browser is still there. Files "sent" to a browser wait in
+/// Serves the web app at `/app/`, and keeps a session per open browser
+/// tab. The web app checks its inbox every couple of seconds, which is
+/// also how the app knows the browser is still there. Files "sent" to a browser wait in
 /// its inbox until it downloads them. Browsers *sending* files use the
 /// normal prepare-upload/upload endpoints, so that needs nothing here.
 class BrowserBridge {
@@ -38,10 +31,6 @@ class BrowserBridge {
 
   /// Browsers came, went or were renamed.
   final VoidCallback onChanged;
-
-  /// File name → contents, loaded from the app's assets at start. Empty
-  /// if they couldn't be loaded (then the page isn't available).
-  Map<String, List<int>> webFiles = const {};
 
   /// The Flutter web app (path → contents), served under `/app/`. Empty
   /// unless it was built into the app (see tool/build_web_app.sh).
@@ -96,16 +85,12 @@ class BrowserBridge {
     onChanged();
   }
 
-  /// Handles the page and the browser API. Returns false for anything
+  /// Handles the web app and the browser API. Returns false for anything
   /// else, so the server can answer 404.
   Future<bool> handle(HttpRequest req) async {
     final path = req.uri.path;
     switch ((req.method, path)) {
-      case ('GET', '/' || '/index.html'):
-        await _serveFile(req, 'index.html');
-      case ('GET', _) when path.startsWith('/web/'):
-        await _serveFile(req, path.substring('/web/'.length));
-      case ('GET', '/app'):
+      case ('GET', '/' || '/app'):
         req.response.redirect(Uri(path: '/app/'), status: 301);
         await req.response.close();
       case ('GET', _) when path.startsWith('/app/'):
@@ -123,36 +108,6 @@ class BrowserBridge {
         return false;
     }
     return true;
-  }
-
-  Future<void> _serveFile(HttpRequest req, String name) async {
-    final bytes = webFiles[name];
-    if (bytes == null) {
-      throw HttpError(
-        webFiles.isEmpty ? 503 : 404,
-        webFiles.isEmpty ? 'The browser page isn\'t available' : 'Not found',
-      );
-    }
-    final type = switch (name.split('.').last) {
-      'html' => ContentType.html,
-      'css' => ContentType('text', 'css', charset: 'utf-8'),
-      'js' => ContentType('text', 'javascript', charset: 'utf-8'),
-      'svg' => ContentType('image', 'svg+xml'),
-      _ => ContentType.binary,
-    };
-    req.response
-      ..headers.contentType = type
-      ..headers.set('Cache-Control', 'no-cache')
-      ..headers.set('X-Content-Type-Options', 'nosniff')
-      ..headers.set('Referrer-Policy', 'no-referrer')
-      ..headers.set(
-        'Content-Security-Policy',
-        "default-src 'self'; img-src 'self' data:; style-src 'self'; "
-            "script-src 'self'; connect-src 'self'; object-src 'none'; "
-            "base-uri 'none'; frame-ancestors 'none'; form-action 'none'",
-      )
-      ..add(bytes);
-    await req.response.close();
   }
 
   Future<void> _serveAppFile(HttpRequest req, String name) async {
@@ -180,16 +135,16 @@ class BrowserBridge {
       ..headers.set('Cache-Control', 'no-cache')
       ..headers.set('X-Content-Type-Options', 'nosniff')
       ..headers.set('Referrer-Policy', 'no-referrer')
-      // Looser than the page's: Flutter compiles WebAssembly and sets
-      // inline styles, and the app talks to the other devices (plain http
-      // on the LAN), the signaling server, reads picked files (blob: URLs),
-      // and fetches fonts when there's internet.
+      // Flutter compiles WebAssembly and sets inline styles, and the app
+      // talks to the other devices (plain http on the LAN), the signaling
+      // server and its relay list, reads picked files (blob: URLs), and
+      // fetches fallback fonts when there's internet.
       ..headers.set(
         'Content-Security-Policy',
         "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; "
             "style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; "
             "font-src 'self' data:; "
-            "connect-src 'self' blob: http: wss: https://fonts.gstatic.com; "
+            "connect-src 'self' blob: http: https: wss:; "
             "worker-src 'self' blob:; object-src 'none'; base-uri 'self'; "
             "frame-ancestors 'none'; form-action 'none'",
       )
@@ -243,10 +198,6 @@ class BrowserBridge {
       for (final item in session.items)
         if (item.transfer.status != TransferStatus.cancelled) _itemJson(item),
     ];
-    // Text is delivered as soon as the page has it.
-    for (final item in session.items.where((i) => i.inlineText != null)) {
-      _delivered(item);
-    }
     await replyJson(req, 200, {'host': _hostJson(), 'items': items});
   }
 
@@ -323,15 +274,12 @@ class BrowserBridge {
 
   static Map<String, Object?> _itemJson(_Item item) {
     final file = item.transfer.files[item.index];
-    final text = item.inlineText;
     return {
       'item': item.id,
       // Files sent together share a batch, so they're offered together.
       'batch': item.transfer.sessionId,
       'name': file.name,
       'size': file.bytes,
-      'kind': text == null ? 'file' : 'text',
-      'text': ?text,
     };
   }
 
@@ -391,9 +339,4 @@ class _Item {
   final Transfer transfer;
   final int index;
   bool delivered = false;
-
-  String? get inlineText {
-    final file = transfer.files[index];
-    return file.text != null && file.bytes <= _maxInlineText ? file.text : null;
-  }
 }

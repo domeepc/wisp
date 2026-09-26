@@ -3,7 +3,7 @@ import 'dart:io';
 
 /// A file (or piece of text) picked for sending.
 class SharedFile {
-  const SharedFile(this.name, this.bytes, {this.source, this.text});
+  const SharedFile(this.name, this.bytes, {this.source});
 
   /// A file on disk.
   factory SharedFile.fromPath(String path) {
@@ -18,12 +18,7 @@ class SharedFile {
   /// Text sent as a .txt file.
   factory SharedFile.text(String text, {String name = 'Text.txt'}) {
     final data = utf8.encode(text);
-    return SharedFile(
-      name,
-      data.length,
-      source: () => Stream.value(data),
-      text: text,
-    );
+    return SharedFile(name, data.length, source: () => Stream.value(data));
   }
 
   final String name;
@@ -31,10 +26,6 @@ class SharedFile {
 
   /// Opens the contents for reading. Null for placeholder files in tests.
   final Stream<List<int>> Function()? source;
-
-  /// The text itself, for files made with [SharedFile.text] — the browser
-  /// page shows these as a snippet with a Copy button.
-  final String? text;
 
   Stream<List<int>> openRead() =>
       source?.call() ?? (throw StateError('$name has no data source'));

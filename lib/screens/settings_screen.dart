@@ -34,7 +34,7 @@ class SettingsScreen extends StatelessWidget {
     if (dir == null) return;
     final ok = await service.setSaveDir(dir);
     if (!ok && context.mounted) {
-      Toasts.of(context).message(
+      ToastController.of(context).message(
         'Wisp can\'t save files in that folder',
         subtitle: 'Pick another one',
         icon: Icons.folder_off_outlined,
@@ -104,8 +104,7 @@ class SettingsScreen extends StatelessWidget {
                       ],
                       // The link has the address in it, so it's copied,
                       // not shown.
-                      if (service.webAppUrl ?? service.browserUrl
-                          case final url?) ...[
+                      if (service.browserUrl case final url?) ...[
                         const Divider(),
                         ListTile(
                           title: const Text('Link for browsers'),
@@ -184,7 +183,7 @@ class SettingsScreen extends StatelessWidget {
                         Text(
                           'Protocol $protocolVersion. Files go straight between your '
                           'devices over your Wi-Fi. Transfers between Wisp apps '
-                          'are encrypted; the browser page isn\'t, so use it on '
+                          'are encrypted; the web app on your Wi-Fi isn\'t, so use it on '
                           'networks you trust.',
                           style: text.bodyMedium,
                         ),

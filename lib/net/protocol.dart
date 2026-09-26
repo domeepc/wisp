@@ -19,7 +19,7 @@
 //   POST /api/wisp/v1/cancel?sessionId=
 //
 // Browsers can't check a self-made certificate without scary warnings, so
-// the browser page (browser_bridge.dart) is plain HTTP on
+// the web app (browser_bridge.dart) is plain HTTP on
 // [defaultBrowserPort]. Browsers upload through the same prepare-upload /
 // upload / cancel endpoints there. That part is not encrypted.
 
