@@ -19,9 +19,16 @@ Future<List<SharedFile>> pickWebFiles({required bool media}) {
     ..type = 'file'
     ..multiple = true
     ..accept = media ? 'image/*,video/*' : ''
+    // Safari anchors its menu to the input, but treats a fully
+    // transparent or tiny one as not there and opens the menu from the
+    // whole page instead (a dark blob, then a menu at the top). So it's a
+    // finger-sized box around the tap, just short of transparent.
     ..style.cssText =
-        'position:fixed;left:${_tapX}px;top:${_tapY}px;'
-        'width:1px;height:1px;opacity:0;pointer-events:none';
+        'position:fixed;left:${_tapX - _anchor / 2}px;'
+        'top:${_tapY - _anchor / 2}px;width:${_anchor}px;height:${_anchor}px;'
+        'opacity:0.02;color:transparent;background:transparent;border:0;'
+        'margin:0;padding:0;font-size:0;z-index:2147483647;'
+        'pointer-events:none';
   void finish(List<SharedFile> files) {
     input.remove();
     if (!done.isCompleted) done.complete(files);
@@ -45,6 +52,9 @@ Future<List<SharedFile>> pickWebFiles({required bool media}) {
 }
 
 double _tapX = 0, _tapY = 0;
+
+/// Size of the box the menu opens from, in CSS pixels.
+const _anchor = 44.0;
 
 /// Remembers where each tap lands, for [pickWebFiles]. Call at startup.
 void trackTaps() => web.window.addEventListener(
