@@ -1,6 +1,5 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -83,6 +82,27 @@ void main() {
     for (final label in ['Files', 'Photos', 'Text', 'Paste', 'Voice']) {
       expect(find.text(label), findsOneWidget);
     }
+  });
+
+  testWidgets('phone: a clipboard the browser won\'t share opens the text '
+      'box instead', (tester) async {
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async => call.method == 'Clipboard.getData'
+          ? throw PlatformException(code: 'paste_fail')
+          : null,
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    await _pumpApp(tester, _phone, _service());
+    await tester.tap(find.text('Paste'));
+    await tester.pumpAndSettle();
+    expect(find.text('Send text'), findsOneWidget);
+    expect(find.text('Couldn\'t open the file picker'), findsNothing);
   });
 
   testWidgets('phone: shows a placeholder with nobody around', (tester) async {

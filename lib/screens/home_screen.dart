@@ -94,7 +94,15 @@ class _MobileHomeState extends State<MobileHome> {
   }
 
   Future<List<SharedFile>> _paste() async {
-    final file = await clipboardAsFile();
+    final SharedFile? file;
+    try {
+      file = await clipboardAsFile();
+    } on Exception {
+      // Browsers ask first (Safari with a small Paste button). Dismissed
+      // or blocked: the text box takes a paste too.
+      if (!mounted) return const [];
+      return [?await askForText(context)];
+    }
     if (file == null) _snack('The clipboard has no text');
     return [?file];
   }
