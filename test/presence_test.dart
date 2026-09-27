@@ -9,18 +9,10 @@ import 'package:wisp/net/signaling.dart';
 import 'package:wisp/services/wisp_service.dart';
 
 void main() {
-  test('an installed app shows up with its web app address', () async {
+  test('an installed app shows up in the room', () async {
     final tmp = await Directory.systemTemp.createTemp('wisp_presence');
-    final app = WispService(
-      name: 'Desk PC',
-      saveDir: tmp.path,
-      port: 0,
-      pagePort: 0,
-      loadWebFiles: () async => {},
-    );
+    final app = WispService(name: 'Desk PC', saveDir: tmp.path, port: 0);
     await app.start(discovery: false);
-    app.localAddress = '192.168.1.24';
-    await app.setShowOnWeb(true); // announces with the address
 
     var peers = <RoomPeer>[];
     final watcher = Signaling(
@@ -36,7 +28,7 @@ void main() {
     await _until(() => peers.any((p) => p.id == app.self.id), 'app in room');
     final seen = peers.firstWhere((p) => p.id == app.self.id);
     expect(seen.name, 'Desk PC');
-    expect(seen.lan, Uri.parse('http://192.168.1.24:${app.browserPort}'));
+    expect(seen.platform, app.self.platform.name);
 
     await app.setShowOnWeb(false);
     await _until(() => peers.every((p) => p.id != app.self.id), 'app gone');

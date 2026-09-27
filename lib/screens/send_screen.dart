@@ -115,10 +115,11 @@ class _SendScreenState extends State<SendScreen> {
               style: text.bodyMedium,
               textAlign: .center,
             ),
-            TextButton(
-              onPressed: () => connectWithCode(context),
-              child: const Text('Device missing? Connect with a code'),
-            ),
+            if (!WispScope.of(context).isWebClient)
+              TextButton(
+                onPressed: () => connectWithCode(context),
+                child: const Text('Device missing? Connect with a code'),
+              ),
           ],
         ),
       ),

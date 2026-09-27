@@ -48,7 +48,6 @@ app.*.map.json
 .widget_preview/
 
 # Built by tool/build_web_app.sh
-/assets/webapp/webapp.zip
 
 # wrangler files
 .wrangler

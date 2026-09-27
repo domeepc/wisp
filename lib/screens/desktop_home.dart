@@ -171,10 +171,12 @@ class _DesktopHomeState extends State<DesktopHome> {
                 ],
               ),
             ),
-            OutlinedButton(
-              onPressed: () => connectWithCode(context),
-              child: const Text('Connect with code'),
-            ),
+            // Browsers only have the room; there's no code to type.
+            if (!service.isWebClient)
+              OutlinedButton(
+                onPressed: () => connectWithCode(context),
+                child: const Text('Connect with code'),
+              ),
           ],
         ),
         const SizedBox(height: AppSpacing.xl),
@@ -201,21 +203,14 @@ class _DesktopHomeState extends State<DesktopHome> {
                       width: cardWidth,
                       child: DeviceCard(
                         device: device,
-                        action: service.opensElsewhere(device)
-                            ? FilledButton(
-                                onPressed: () => service.handOff(device),
-                                child: const Text('Open'),
-                              )
-                            : FilledButton(
-                                onPressed: count == 0
-                                    ? null
-                                    : () => _sendTo(device),
-                                child: Text(switch (count) {
-                                  0 => 'Select files first',
-                                  1 => 'Send 1 file',
-                                  _ => 'Send $count files',
-                                }),
-                              ),
+                        action: FilledButton(
+                          onPressed: count == 0 ? null : () => _sendTo(device),
+                          child: Text(switch (count) {
+                            0 => 'Select files first',
+                            1 => 'Send 1 file',
+                            _ => 'Send $count files',
+                          }),
+                        ),
                       ),
                     ),
                 ],

@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
@@ -12,15 +11,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../models/device.dart';
 import '../models/shared_file.dart';
 import '../models/transfer.dart';
-import '../net/browser/browser_http.dart';
-import '../net/browser/rtc_peers.dart';
-import '../net/browser/web_links.dart';
-import '../net/browser_bridge.dart';
 import '../net/client.dart';
 import '../net/device_code.dart';
 import '../net/discovery.dart';
 import '../net/identity.dart';
 import '../net/protocol.dart';
+import '../net/rtc_peers.dart';
 
 export '../net/protocol.dart' show ConnectException;
 import '../net/server.dart';
@@ -60,46 +56,28 @@ class WispService extends ChangeNotifier {
     String? name,
     this.saveDir,
     this.port = defaultServerPort,
-    this.pagePort = defaultBrowserPort,
     this.prefs,
-    Future<Map<String, List<int>>> Function()? loadWebFiles,
-    BrowserHttp? browserHttp,
-  }) : _loadWebFiles = loadWebFiles ?? _loadBundledWebFiles,
-       _browserHttp = browserHttp ?? (kIsWeb ? createBrowserHttp() : null),
-       self = Device(
+  }) : self = Device(
          id: randomHex(8),
          name: name ?? randomDeviceName(),
          platform: _currentPlatform(),
        );
 
-  /// Running as a web app: no discovery and no server, so it connects
-  /// out to other devices instead (see [WebLinks]).
-  bool get isWebClient => _browserHttp != null;
-  final BrowserHttp? _browserHttp;
-  WebLinks? _web;
+  /// Running as a web app: no discovery and no server, so it only has
+  /// the room on the signaling server ([RtcPeers]).
+  bool get isWebClient => kIsWeb;
 
-  /// Web app only: devices found through the signaling server, and
-  /// WebRTC to other browsers (see rtc_peers_web.dart).
+  /// Everyone in our room on the signaling server, reached over WebRTC.
+  /// Null without a signaling server.
   RtcPeers? _rtc;
-
-  /// Installed apps: our entry on the signaling server, so the web app
-  /// can find us from the internet. See [showOnWeb].
-  Signaling? _presence;
 
   Device self;
 
-  /// Ports to listen on: HTTPS for other apps, plain HTTP for the browser
-  /// page. Others are picked if these are taken.
+  /// The HTTPS port other apps connect to. Another is picked if it's taken.
   final int port;
-  final int pagePort;
-
-  /// The port browsers use (the web app), once started.
-  int? browserPort;
 
   /// Where settings are saved. Null means nothing is remembered (tests).
   final SharedPreferencesAsync? prefs;
-
-  final Future<Map<String, List<int>>> Function() _loadWebFiles;
 
   /// Where received files go. Picked automatically in [start] if null.
   String? saveDir;
@@ -118,56 +96,43 @@ class WispService extends ChangeNotifier {
   set visible(bool value) {
     _visible = value;
     if (value) _discovery?.announce();
-    _web?.paused = !value;
-    _rtc?.paused = !value;
-    _updatePresence();
+    _updateRoom();
     notifyListeners();
   }
 
   /// Whether the web app on the internet can find this device (through
-  /// the signaling server, which then knows its name and local address).
+  /// the signaling server, which then knows its name).
   bool get showOnWeb => _showOnWeb;
   bool _showOnWeb = true;
 
   Future<void> setShowOnWeb(bool value) async {
     _showOnWeb = value;
-    _updatePresence();
+    _updateRoom();
     notifyListeners();
     await prefs?.setBool(_Keys.showOnWeb, value);
   }
 
-  void _updatePresence() {
-    final url = browserUrl;
-    if (signalingUrl.isEmpty ||
-        isWebClient ||
-        !_running ||
-        !_visible ||
-        !_showOnWeb ||
-        url == null) {
-      _presence?.stop();
-      _presence = null;
-      return;
-    }
-    if (_presence case final presence?) return presence.announce();
-    _presence = Signaling(
-      self: () => {
-        'id': self.id,
-        'name': self.name,
-        'platform': self.platform.name,
-        'lan': browserUrl,
-      },
-    )..start();
+  /// Joins the room on the signaling server, if there is one.
+  void _joinRoom() {
+    if (signalingUrl.isEmpty) return;
+    _rtc = RtcPeers(
+      self: () => self,
+      onChanged: notifyListeners,
+      onOffer: _onOffer,
+    );
+    _updateRoom();
   }
 
-  /// Nearby devices running Wisp, plus browsers that have the web app open.
-  List<Device> get devices => switch (_web) {
-    // Devices we're linked to directly win over the same ones in the room.
-    final web? => [
-      ...web.devices,
-      ...?_rtc?.devices.where((d) => !web.owns(d.id)),
-    ],
-    null => [..._devices.values.map((s) => s.device), ..._browsers.devices],
-  }..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
+  /// In the room while visible (and, for apps, shown on the web app).
+  void _updateRoom() =>
+      _rtc?.paused = !_visible || !(isWebClient || _showOnWeb);
+
+  /// Nearby devices: found on the Wi-Fi, or in the room (like browsers).
+  List<Device> get devices => [
+    ..._devices.values.map((s) => s.device),
+    // Found both ways: the Wi-Fi wins, it's faster.
+    ...?_rtc?.devices.where((d) => !_devices.containsKey(d.id)),
+  ]..sort((a, b) => a.name.toLowerCase().compareTo(b.name.toLowerCase()));
   final _devices = <String, ({Device device, DateTime lastSeen})>{};
 
   /// Newest last.
@@ -187,16 +152,11 @@ class WispService extends ChangeNotifier {
   final _manual = <String, ({Device device, DateTime lastOk})>{};
 
   late final _client = WispClient(self: () => self);
-  late final _browsers = BrowserBridge(
-    host: () => (device: self, receiving: _visible),
-    onChanged: notifyListeners,
-  );
   late final _server = WispServer(
     self: () => self,
     onRegister: (device) => _seen(device, registerBack: false),
     onOffer: _onOffer,
     onOfferCancelled: _onOfferCancelled,
-    extraRoutes: _browsers.handle,
   );
   Discovery? _discovery;
   Timer? _tick;
@@ -205,27 +165,17 @@ class WispService extends ChangeNotifier {
 
   Future<void> start({bool discovery = true}) async {
     if (_running) return;
-    if (_browserHttp case final http?) return _startWebClient(http);
+    if (isWebClient) return _startWebClient();
     try {
       await _loadSettings();
       saveDir ??= await _defaultSaveDir();
-      try {
-        _browsers.appFiles = await _loadWebFiles();
-      } catch (_) {
-        // No web app for browsers, but everything else still works.
-      }
       localAddress = await _findLocalAddress();
       final identity = await _loadIdentity();
-      await _server.start(
-        port: port,
-        browserPort: pagePort,
-        tls: identity.serverContext,
-      );
+      await _server.start(port: port, tls: identity.serverContext);
       self = self.copyWith(
         port: _server.port,
         fingerprint: identity.fingerprint,
       );
-      browserPort = _server.browserPort;
 
       if (discovery) {
         // Android drops multicast packets unless the app holds a lock.
@@ -242,7 +192,7 @@ class WispService extends ChangeNotifier {
       _tick = Timer.periodic(const Duration(seconds: 2), (_) => _onTick());
       _running = true;
       startError = null;
-      _updatePresence();
+      _joinRoom();
     } catch (e) {
       startError = '$e';
     }
@@ -250,20 +200,15 @@ class WispService extends ChangeNotifier {
   }
 
   Future<void> stop() async {
-    _presence?.stop();
     _rtc?.stop();
-    if (_web case final web?) {
-      web.stop();
-      _running = false;
-      return;
-    }
+    _running = false;
+    if (isWebClient) return;
     _tick?.cancel();
     _discovery?.stop();
     await _server.stop();
-    if (!kIsWeb && Platform.isAndroid && _discovery != null) {
+    if (Platform.isAndroid && _discovery != null) {
       await _multicastChannel.invokeMethod<void>('release');
     }
-    _running = false;
   }
 
   @override
@@ -276,30 +221,22 @@ class WispService extends ChangeNotifier {
   /// Starts sending [files] to [peer]. Watch the returned transfer.
   Transfer send(Device peer, List<SharedFile> files) {
     final sessionId = randomHex(16);
+    // Devices on the Wi-Fi announce a certificate; ones only in the room
+    // don't, and are reached over WebRTC.
     final fingerprint = peer.fingerprint;
     final transfer = Transfer(
       direction: TransferDirection.send,
       peer: peer,
       files: files,
       sessionId: sessionId,
-      securityCode: switch (fingerprint) {
-        final fingerprint? => securityCode(fingerprint, sessionId),
-        // Browser to browser: comes from the connection, once it's up.
-        null when _rtc?.owns(peer.id) ?? false => '',
-        // From a browser there's no certificate to check; a random code
-        // at least shows it's the same transfer on both screens.
-        null when isWebClient => randomHex(2).toUpperCase(),
-        // To a browser: no code to compare.
-        null => '',
-      },
+      // Over WebRTC it comes from the connection, once that's up.
+      securityCode: fingerprint == null
+          ? ''
+          : securityCode(fingerprint, sessionId),
     );
     _addTransfer(transfer);
-    if (_rtc?.owns(peer.id) ?? false) {
-      _rtc!.send(transfer);
-    } else if (_web case final web?) {
-      web.send(transfer);
-    } else if (_browsers.owns(peer.id)) {
-      _browsers.share(transfer);
+    if (fingerprint == null) {
+      _rtc?.send(transfer);
     } else {
       _client.send(transfer);
     }
@@ -308,34 +245,18 @@ class WispService extends ChangeNotifier {
 
   /// This device's code for "Connect with code", like `7K3M-Q2XA`: its
   /// address in a form that's easy to read out (see device_code.dart).
-  /// Works from the app and from the web app alike.
   String? get connectCode {
     final address = localAddress;
     final port = self.port; // null until the server is listening
     if (address == null || port == null) return null;
-    return encodeDeviceCode(
-      address,
-      port: port,
-      browserPort: browserPort ?? defaultBrowserPort,
-    );
-  }
-
-  /// The address to open in a browser on another device, e.g.
-  /// `http://192.168.1.24:53319`: it opens the web app, which connects to
-  /// this device by itself (built in by tool/build_web_app.sh).
-  String? get browserUrl {
-    final address = localAddress;
-    final port = browserPort;
-    if (address == null || port == null) return null;
-    return 'http://$address:$port';
+    return encodeDeviceCode(address, port: port);
   }
 
   /// Connects to a device by its code (see [parseConnectCode]), for when
   /// discovery doesn't find it. Throws [ConnectException] with a message
   /// for the user if that doesn't work.
   Future<Device> connect(String code) async {
-    if (_web case final web?) return web.connect(code);
-    final target = parseConnectCode(code, localAddress: localAddress);
+    final target = decodeDeviceCode(code);
     if (target == null) {
       throw const ConnectException(
         'That code doesn\'t look right. Check it and try again.',
@@ -369,9 +290,7 @@ class WispService extends ChangeNotifier {
     if (name.length > 40) name = name.substring(0, 40);
     self = self.copyWith(name: name);
     _discovery?.announce();
-    _web?.renamed();
     _rtc?.renamed();
-    _presence?.announce();
     notifyListeners();
     await prefs?.setString(_Keys.name, name);
   }
@@ -418,58 +337,18 @@ class WispService extends ChangeNotifier {
     _trusted.addAll(await prefs.getStringList(_Keys.trusted) ?? const []);
   }
 
-  Future<void> _startWebClient(BrowserHttp http) async {
+  Future<void> _startWebClient() async {
     await _loadSettings();
     self = Device(
       id: self.id,
       name: self.name,
       platform: DevicePlatform.browser,
-      detail: http.browserName,
+      detail: browserName,
     );
-    final saved = await prefs?.getStringList(_Keys.webHosts) ?? const [];
-    _web = WebLinks(
-      http: http,
-      self: () => self,
-      onChanged: notifyListeners,
-      onOffer: _onOffer,
-      onConnected: (address) async {
-        final hosts = {...?await prefs?.getStringList(_Keys.webHosts)};
-        if (hosts.add('$address')) {
-          await prefs?.setStringList(_Keys.webHosts, hosts.toList());
-        }
-      },
-    )..paused = !_visible;
-    _web!.start([
-      for (final host in saved) (address: Uri.parse(host), saved: true),
-      // In case this page is served by a Wisp device itself.
-      if (kIsWeb && Uri.base.hasPort)
-        (
-          address: Uri(
-            scheme: 'http',
-            host: Uri.base.host,
-            port: Uri.base.port,
-          ),
-          saved: false,
-        ),
-    ]);
-    if (kIsWeb && signalingUrl.isNotEmpty) {
-      _rtc = RtcPeers(
-        self: () => self,
-        onChanged: notifyListeners,
-        onOffer: _onOffer,
-      )..paused = !_visible;
-    }
     _running = true;
+    _joinRoom();
     notifyListeners();
   }
-
-  /// A device the web app can't reach from where it is: an installed app,
-  /// seen from the internet. [handOff] opens its own web app instead.
-  bool opensElsewhere(Device device) =>
-      !(_web?.owns(device.id) ?? false) &&
-      (_rtc?.isInstalled(device.id) ?? false);
-
-  void handOff(Device device) => _rtc?.handOff(device.id);
 
   /// This device's certificate: the saved one, or a new one on first run.
   Future<Identity> _loadIdentity() async {
@@ -515,12 +394,10 @@ class WispService extends ChangeNotifier {
     _devices.removeWhere((_, s) => s.lastSeen.isBefore(cutoff));
 
     _pollManualDevices();
-    _browsers.prune();
 
     final address = await _findLocalAddress();
     if (_devices.length != before || address != localAddress) {
       localAddress = address;
-      _updatePresence();
       notifyListeners();
     }
   }
@@ -598,13 +475,6 @@ class WispService extends ChangeNotifier {
   /// Name of the folder received files go to, e.g. "Downloads".
   String get saveDirName =>
       saveDir == null ? 'Downloads' : p.basename(saveDir!);
-
-  /// The web app's files (path → contents), packed in by
-  /// tool/build_web_app.sh.
-  static Future<Map<String, List<int>>> _loadBundledWebFiles() async {
-    final zip = await rootBundle.load('assets/webapp/webapp.zip');
-    return compute(_unzipWebApp, zip.buffer.asUint8List());
-  }
 
   static DevicePlatform _currentPlatform() {
     if (kIsWeb) return DevicePlatform.browser;
@@ -694,11 +564,5 @@ abstract final class _Keys {
   static const trusted = 'trustedDevices';
   static const cert = 'tlsCertificate';
   static const key = 'tlsPrivateKey';
-  static const webHosts = 'webHosts';
   static const showOnWeb = 'showOnWeb';
 }
-
-Map<String, List<int>> _unzipWebApp(Uint8List zip) => {
-  for (final file in ZipDecoder().decodeBytes(zip))
-    if (file.isFile) file.name: file.content,
-};

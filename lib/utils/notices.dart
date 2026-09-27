@@ -81,7 +81,6 @@ class Notices {
       device,
       'Lost connection to ${device.name}',
       ToastTone.error,
-      subtitle: 'Trying again while this page is open',
     );
   }
 
@@ -171,14 +170,13 @@ void showDeviceToast(
   ToastController toasts,
   Device device,
   String title,
-  ToastTone tone, {
-  String? subtitle,
-}) {
+  ToastTone tone,
+) {
   toasts.show(
     key: 'device:${device.id}',
     content: () => ToastContent(
       title: title,
-      subtitle: subtitle ?? device.subtitle,
+      subtitle: device.subtitle,
       tone: tone,
       leading: _Badged(
         tone: tone,

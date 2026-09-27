@@ -41,13 +41,12 @@ const B = `test-b-${run}`;
 const ours = (m) => m.peers.map((p) => p.id).filter((id) => id.endsWith(run)).sort().join();
 const peersIs = (ids) => (m) => m.type === 'peers' && ours(m) === ids.sort().join();
 
-const a = await join({ id: A, name: 'Laptop', platform: 'linux', lan: 'http://192.168.1.24:53319' });
-const b = await join({ id: B, name: 'Phone', lan: 'https://evil.example' });
+const a = await join({ id: A, name: 'Laptop', platform: 'linux', extra: 'dropped' });
+const b = await join({ id: B, name: 'Phone' });
 
 const seen = await a.next(peersIs([A, B]));
 const byId = Object.fromEntries(seen.peers.map((p) => [p.id, p]));
-assert.equal(byId[A].lan, 'http://192.168.1.24:53319');
-assert.equal(byId[B].lan, undefined, 'links outside the LAN are dropped');
+assert.equal(byId[A].extra, undefined, 'only known fields are passed on');
 assert.equal(byId[B].platform, 'browser');
 
 a.ws.send(JSON.stringify({ type: 'signal', to: B, data: { hi: 1 } }));

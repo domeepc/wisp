@@ -6,7 +6,6 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/format.dart';
 import '../utils/open_folder.dart';
-import '../utils/transfer_text.dart';
 
 /// Page 3: live progress of one transfer, sending or receiving.
 class TransferScreen extends StatefulWidget {
@@ -108,9 +107,7 @@ class _TransferView extends StatelessWidget {
                   child: _ProgressRing(
                     progress: t.progress,
                     caption: t.status == TransferStatus.waiting
-                        ? (toBrowser(t)
-                              ? 'Waiting for download'
-                              : 'Waiting to accept')
+                        ? 'Waiting to accept'
                         : '${formatBytes(t.bytesDone)} of '
                               '${formatBytes(t.totalBytes)}',
                   ),
@@ -154,21 +151,6 @@ class _TransferView extends StatelessWidget {
     final text = Theme.of(context).textTheme;
 
     switch (t.status) {
-      case TransferStatus.waiting when toBrowser(t):
-        return [
-          _InfoBox(
-            children: [
-              Expanded(
-                child: Text(
-                  '${t.peer.name} is asked in their browser. '
-                  'It\'s sent once they download it.',
-                  style: text.bodyLarge,
-                  textAlign: .center,
-                ),
-              ),
-            ],
-          ),
-        ];
       case TransferStatus.waiting:
         return [
           _InfoBox(

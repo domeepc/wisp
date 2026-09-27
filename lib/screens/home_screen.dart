@@ -46,7 +46,7 @@ String visibilityLabel(WispService service, {bool showCode = false}) {
   return 'Visible · ready to receive';
 }
 
-/// In the browser there's no scanning, only devices connected by hand.
+/// In the browser there's no scanning, only the room.
 String connectedLabel(int count) => switch (count) {
   0 => 'Not connected yet',
   1 => 'Connected to 1 device',
@@ -208,9 +208,7 @@ class _MobileHomeState extends State<MobileHome> {
                         title: Text(device.name),
                         subtitle: Text(device.subtitle),
                         trailing: const Icon(Icons.chevron_right),
-                        onTap: () => service.opensElsewhere(device)
-                            ? service.handOff(device)
-                            : _pickAndSend(pickFiles, to: device),
+                        onTap: () => _pickAndSend(pickFiles, to: device),
                       ),
                     ],
                   ],

@@ -1,17 +1,18 @@
 import 'dart:async';
 import 'dart:io' show ProcessException;
+import 'dart:typed_data';
 
-import 'package:flutter/foundation.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:record/record.dart';
 
 import '../models/shared_file.dart';
 import '../theme/tokens.dart';
-import '../utils/recording_io.dart'
-    if (dart.library.js_interop) '../utils/recording_web.dart';
 
-/// Whether this device can record voice messages at all.
-bool get canRecordVoice => canRecordHere;
+/// Whether this device can record voice messages at all: browsers only
+/// share the microphone with https (or localhost) pages.
+bool get canRecordVoice =>
+    !kIsWeb || Uri.base.scheme == 'https' || Uri.base.host == 'localhost';
 
 /// Records a voice message. Returns it as a file, or null if the user
 /// cancels or the microphone can't be used (the dialog says why).
@@ -34,8 +35,16 @@ class _VoiceDialogState extends State<_VoiceDialog> {
   Timer? _ticker;
   StreamSubscription<Amplitude>? _levels;
 
-  /// The file's extension, once recording has started.
-  String? _extension;
+  /// Raw 16-bit samples, made into a .wav at the end: plays everywhere,
+  /// and needs no encoder (Linux would need ffmpeg for anything else).
+  var _config = const RecordConfig(
+    encoder: AudioEncoder.pcm16bits,
+    sampleRate: 44100,
+    numChannels: 1,
+  );
+  final _pcm = BytesBuilder();
+  Future<void>? _pcmDone;
+  bool _started = false;
   String? _error;
   bool _saving = false;
   bool _finished = false;
@@ -54,11 +63,9 @@ class _VoiceDialogState extends State<_VoiceDialog> {
       if (!await _recorder.hasPermission()) {
         return _fail('Wisp isn\'t allowed to use the microphone.');
       }
-      final (encoder, extension) = await _format();
-      await _recorder.start(
-        RecordConfig(encoder: encoder, numChannels: 1),
-        path: await recordingPath(extension),
-      );
+      // The platform may pick another rate; the .wav must say which.
+      await _recorder.setOnConfigChanged((config) => _config = config);
+      _pcmDone = (await _recorder.startStream(_config)).forEach(_pcm.add);
       if (!mounted) return;
       _levels = _recorder
           .onAmplitudeChanged(const Duration(milliseconds: 100))
@@ -68,28 +75,15 @@ class _VoiceDialogState extends State<_VoiceDialog> {
         (_) => setState(() {}),
       );
       setState(() {
-        _extension = extension;
+        _started = true;
         _clock.start();
       });
     } on ProcessException {
-      // Linux records through parecord and ffmpeg.
-      _fail('Recording needs ffmpeg and pulseaudio-utils installed.');
+      // Linux records through parecord.
+      _fail('Recording needs pulseaudio-utils installed.');
     } on Exception {
       _fail('Couldn\'t use the microphone.');
     }
-  }
-
-  /// AAC (.m4a) plays everywhere; browsers without it record Opus.
-  Future<(AudioEncoder, String)> _format() async {
-    final formats = [
-      (AudioEncoder.aacLc, 'm4a'),
-      (AudioEncoder.opus, kIsWeb ? 'webm' : 'ogg'),
-      (AudioEncoder.wav, 'wav'),
-    ];
-    for (final format in formats) {
-      if (await _recorder.isEncoderSupported(format.$1)) return format;
-    }
-    return formats.last;
   }
 
   /// Maps dBFS (-160 silent … 0 loudest) onto 0 to 1; speech sits
@@ -111,10 +105,20 @@ class _VoiceDialogState extends State<_VoiceDialog> {
     setState(() => _saving = true);
     _stopClock();
     try {
-      final path = await _recorder.stop();
+      await _recorder.stop();
+      await _pcmDone;
       _finished = true;
-      if (path == null) return _fail('Nothing was recorded.');
-      final file = await recordedFile(path, _fileName(DateTime.now()));
+      if (_pcm.isEmpty) return _fail('Nothing was recorded.');
+      final data = wav(
+        _pcm.takeBytes(),
+        sampleRate: _config.sampleRate,
+        channels: _config.numChannels,
+      );
+      final file = SharedFile(
+        _fileName(DateTime.now()),
+        data.length,
+        source: () => Stream.value(data),
+      );
       if (mounted) Navigator.pop(context, file);
     } on Exception {
       _fail('Couldn\'t save the recording.');
@@ -124,7 +128,7 @@ class _VoiceDialogState extends State<_VoiceDialog> {
   String _fileName(DateTime t) {
     String two(int n) => n.toString().padLeft(2, '0');
     return 'Voice message ${t.year}-${two(t.month)}-${two(t.day)} '
-        '${two(t.hour)}.${two(t.minute)}.${two(t.second)}.$_extension';
+        '${two(t.hour)}.${two(t.minute)}.${two(t.second)}.wav';
   }
 
   @override
@@ -143,7 +147,7 @@ class _VoiceDialogState extends State<_VoiceDialog> {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final recording = _extension != null && _error == null;
+    final recording = _started && _error == null;
     final elapsed = _clock.elapsed;
     final time =
         '${elapsed.inMinutes}:'
@@ -205,4 +209,36 @@ class _VoiceDialogState extends State<_VoiceDialog> {
       ],
     );
   }
+}
+
+/// 16-bit PCM [samples] as a .wav file.
+Uint8List wav(
+  Uint8List samples, {
+  required int sampleRate,
+  required int channels,
+}) {
+  final header = ByteData(44);
+  void tag(int at, String text) {
+    for (final (i, c) in text.codeUnits.indexed) {
+      header.setUint8(at + i, c);
+    }
+  }
+
+  tag(0, 'RIFF');
+  header.setUint32(4, 36 + samples.length, .little);
+  tag(8, 'WAVE');
+  tag(12, 'fmt ');
+  header.setUint32(16, 16, .little); // size of this "fmt " part
+  header.setUint16(20, 1, .little); // plain PCM
+  header.setUint16(22, channels, .little);
+  header.setUint32(24, sampleRate, .little);
+  header.setUint32(28, sampleRate * channels * 2, .little); // bytes a second
+  header.setUint16(32, channels * 2, .little); // bytes a sample
+  header.setUint16(34, 16, .little); // bits a sample
+  tag(36, 'data');
+  header.setUint32(40, samples.length, .little);
+  return (BytesBuilder(copy: false)
+        ..add(header.buffer.asUint8List())
+        ..add(samples))
+      .takeBytes();
 }

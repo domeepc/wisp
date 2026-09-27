@@ -27,22 +27,14 @@ class Offer {
   final String securityCode;
 }
 
-/// The receiving side: other devices send files here.
-///
-/// Two listeners: HTTPS for other Wisp apps (everything), and plain HTTP
-/// for browsers (the web app plus the upload endpoints — nothing else).
+/// The receiving side: other Wisp apps send files here, over HTTPS.
 class WispServer {
   WispServer({
     required this.self,
     required this.onRegister,
     required this.onOffer,
     required this.onOfferCancelled,
-    this.extraRoutes,
   });
-
-  /// Handles requests the file protocol doesn't know (the web app).
-  /// Returns false to fall through to a 404.
-  final Future<bool> Function(HttpRequest req)? extraRoutes;
 
   final Device Function() self;
   final void Function(Device device) onRegister;
@@ -55,60 +47,42 @@ class WispServer {
   final void Function(String sessionId) onOfferCancelled;
 
   HttpServer? _secure;
-  HttpServer? _plain;
   final _sessions = <String, _Session>{};
   String? _pendingOfferId;
 
-  /// The HTTPS port other apps connect to.
+  /// The port other apps connect to.
   int get port => _secure?.port ?? 0;
 
-  /// The plain-HTTP port for browsers.
-  int get browserPort => _plain?.port ?? 0;
-
-  /// Listens on the given ports, or on any free ones if they're taken
-  /// (e.g. a second copy of the app on the same computer).
-  Future<void> start({
-    required int port,
-    required int browserPort,
-    required SecurityContext tls,
-  }) async {
+  /// Listens on [port], or on any free one if it's taken (e.g. a second
+  /// copy of the app on the same computer).
+  Future<void> start({required int port, required SecurityContext tls}) async {
     try {
       _secure = await HttpServer.bindSecure(InternetAddress.anyIPv4, port, tls);
     } on SocketException {
       _secure = await HttpServer.bindSecure(InternetAddress.anyIPv4, 0, tls);
     }
-    try {
-      _plain = await HttpServer.bind(InternetAddress.anyIPv4, browserPort);
-    } on SocketException {
-      _plain = await HttpServer.bind(InternetAddress.anyIPv4, 0);
-    }
-    _secure!.listen((req) => _handle(req, secure: true));
-    _plain!.listen((req) => _handle(req, secure: false));
+    _secure!.listen(_handle);
   }
 
   Future<void> stop() async {
     await _secure?.close(force: true);
-    await _plain?.close(force: true);
     _secure = null;
-    _plain = null;
   }
 
-  Future<void> _handle(HttpRequest req, {required bool secure}) async {
+  Future<void> _handle(HttpRequest req) async {
     try {
-      if (!secure && await _cors(req)) return;
       switch ((req.method, req.uri.path)) {
-        case ('GET', Api.info) when secure:
+        case ('GET', Api.info):
           await replyJson(req, 200, self().toJson());
-        case ('POST', Api.register) when secure:
+        case ('POST', Api.register):
           await _register(req);
         case ('POST', Api.prepareUpload):
-          await _prepareUpload(req, secure: secure);
+          await _prepareUpload(req);
         case ('POST', Api.upload):
           await _upload(req);
         case ('POST', Api.cancel):
           await _cancel(req);
         default:
-          if (!secure && (await extraRoutes?.call(req) ?? false)) return;
           await replyJson(req, 404, {'error': 'Not found'});
       }
     } on HttpError catch (e) {
@@ -116,35 +90,6 @@ class WispServer {
     } catch (e) {
       await tryReplyJson(req, 500, {'error': 'Internal error'});
     }
-  }
-
-  /// Lets the Wisp app running in a browser (served from somewhere else,
-  /// e.g. `flutter run -d chrome`) use the browser port. Only pages on
-  /// this computer or the local network — anything else is refused, so a
-  /// website can't make your browser send offers or connect as a device.
-  /// Returns true if it already answered (a preflight).
-  Future<bool> _cors(HttpRequest req) async {
-    final origin = req.headers.value('origin');
-    if (origin == null) return false; // not from a web page
-    if (!isLocalOrigin(origin)) {
-      throw const HttpError(403, 'Origin not allowed');
-    }
-
-    req.response.headers
-      ..set('Access-Control-Allow-Origin', origin)
-      ..set('Vary', 'Origin');
-    if (req.method != 'OPTIONS') return false;
-
-    req.response
-      ..statusCode = HttpStatus.noContent
-      ..headers.set('Access-Control-Allow-Methods', 'GET, POST')
-      ..headers.set('Access-Control-Allow-Headers', 'Content-Type')
-      ..headers.set('Access-Control-Max-Age', '600');
-    if (req.headers.value('access-control-request-private-network') == 'true') {
-      req.response.headers.set('Access-Control-Allow-Private-Network', 'true');
-    }
-    await req.response.close();
-    return true;
   }
 
   Future<void> _register(HttpRequest req) async {
@@ -157,36 +102,26 @@ class WispServer {
     await replyJson(req, 200, self().toJson());
   }
 
-  Future<void> _prepareUpload(HttpRequest req, {required bool secure}) async {
+  Future<void> _prepareUpload(HttpRequest req) async {
     final body = await readJson(req);
     if (body is! Map) throw const HttpError(400, 'Bad request');
 
     final sessionId = body['sessionId'];
-    final code = body['code'];
     final from = Device.fromJson(body['info'], host: remoteAddress(req));
     final rawFiles = body['files'];
+    final files = parseOfferedFiles(rawFiles);
+    final fileIds = [
+      if (files != null)
+        for (final f in rawFiles as List)
+          if ((f as Map)['id'] case final String id) id,
+    ];
     if (sessionId is! String ||
         sessionId.length < 16 ||
         sessionId.length > 64 ||
-        code is! String ||
-        code.length > 8 ||
         from == null ||
-        rawFiles is! List ||
-        rawFiles.isEmpty ||
-        rawFiles.length > 10000) {
+        files == null ||
+        fileIds.length != files.length) {
       throw const HttpError(400, 'Bad request');
-    }
-
-    final fileIds = <String>[];
-    final files = <SharedFile>[];
-    for (final f in rawFiles) {
-      if (f is! Map) throw const HttpError(400, 'Bad file');
-      final (id, name, size) = (f['id'], f['name'], f['size']);
-      if (id is! String || name is! String || size is! int || size < 0) {
-        throw const HttpError(400, 'Bad file');
-      }
-      fileIds.add(id);
-      files.add(SharedFile(safeRelativePath(name), size));
     }
 
     // One question at a time.
@@ -199,12 +134,9 @@ class WispServer {
           sessionId: sessionId,
           from: from,
           files: files,
-          // Over HTTPS the code comes from our own certificate, so it only
-          // matches the sender's if they really connected to us. Browsers
-          // (plain HTTP) can't check certificates; show their code as is.
-          securityCode: secure
-              ? securityCode(self().fingerprint ?? '', sessionId)
-              : code,
+          // It comes from our own certificate, so it only matches the
+          // sender's if they really connected to us.
+          securityCode: securityCode(self().fingerprint ?? '', sessionId),
         ),
       );
     } finally {
@@ -247,7 +179,7 @@ class WispServer {
 
     final transfer = session.transfer;
     final expected = transfer.files[index].bytes;
-    final file = _createUnique(transfer.saveDir!, transfer.files[index].name);
+    final file = createUnique(transfer.saveDir!, transfer.files[index].name);
     final out = await file.open(mode: FileMode.write);
     var received = 0;
     var ok = false;
@@ -303,7 +235,7 @@ class WispServer {
 
   /// Creates [relative] (a [safeRelativePath]) inside [dir], adding
   /// ` (1)`, ` (2)`… to the file name if it already exists.
-  static File _createUnique(String dir, String relative) {
+  static File createUnique(String dir, String relative) {
     final segments = relative.split('/');
     final name = segments.removeLast();
     final parent = Directory(p.joinAll([dir, ...segments]))
@@ -328,6 +260,22 @@ class WispServer {
       }
     }
   }
+}
+
+/// The files someone offers, `[{name, size}, …]`: names made safe, and
+/// null if anything is off.
+List<SharedFile>? parseOfferedFiles(Object? raw) {
+  if (raw is! List || raw.isEmpty || raw.length > 10000) return null;
+  final files = <SharedFile>[];
+  for (final f in raw) {
+    if (f case {'name': final String name, 'size': final int size}
+        when size >= 0) {
+      files.add(SharedFile(safeRelativePath(name), size));
+    } else {
+      return null;
+    }
+  }
+  return files;
 }
 
 /// Makes a file name from another device safe to save: no folders (so

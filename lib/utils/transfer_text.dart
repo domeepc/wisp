@@ -1,4 +1,3 @@
-import '../models/device.dart';
 import '../models/transfer.dart';
 import 'format.dart';
 
@@ -15,7 +14,6 @@ String transferTitle(Transfer t) {
   final peer = t.peer.name;
   final sending = t.direction == TransferDirection.send;
   return switch (t.status) {
-    TransferStatus.waiting when toBrowser(t) => 'Waiting for $peer to download',
     TransferStatus.waiting => 'Waiting for $peer to accept',
     TransferStatus.running =>
       sending ? 'Sending $what to $peer' : 'Receiving $what from $peer',
@@ -33,18 +31,10 @@ String transferSubtitle(Transfer t) {
     return t.speed > 0 ? '$percent · ${formatBytes(t.speed)}/s' : percent;
   }
   if (t.status == TransferStatus.waiting) {
-    return toBrowser(t)
-        ? 'They\'re asked in their browser'
-        : t.securityCode.isEmpty
+    return t.securityCode.isEmpty
         ? 'Connecting…'
         : 'Security code ${t.securityCode}';
   }
   final when = formatWhen(t.finishedAt ?? t.createdAt);
   return '$when · ${formatBytes(t.totalBytes)}';
 }
-
-/// Sending to a browser tab: the files wait there until downloaded, and
-/// there's no security code to compare.
-bool toBrowser(Transfer t) =>
-    t.direction == TransferDirection.send &&
-    t.peer.platform == DevicePlatform.browser;

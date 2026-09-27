@@ -24,28 +24,7 @@ env:
   SIGNALING_URL: ${{ vars.SIGNALING_URL }}
 
 jobs:
-  # The web app the installed app serves to browsers (the QR code).
-  web-app:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          # tool/version.sh counts the commits.
-          fetch-depth: 0
-      - uses: subosito/flutter-action@v2
-        with:
-          flutter-version: ${{ env.FLUTTER_VERSION }}
-          cache: true
-      - run: flutter pub get
-      - run: flutter test
-      - run: ./tool/build_web_app.sh
-      - uses: actions/upload-artifact@v4
-        with:
-          name: webapp
-          path: assets/webapp/webapp.zip
-
   build:
-    needs: web-app
     strategy:
       fail-fast: false
       matrix:
@@ -89,10 +68,6 @@ jobs:
         with:
           flutter-version: ${{ env.FLUTTER_VERSION }}
           cache: true
-      - uses: actions/download-artifact@v4
-        with:
-          name: webapp
-          path: assets/webapp
       - run: flutter pub get
 
       - name: Android

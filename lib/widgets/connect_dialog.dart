@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../models/device.dart';
+import '../net/signaling.dart';
 import '../services/wisp_service.dart';
 import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
@@ -66,8 +67,6 @@ class _ConnectDialogState extends State<_ConnectDialog> {
     final text = Theme.of(context).textTheme;
     final service = WispScope.of(context);
     final myCode = service.connectCode;
-    // A browser has no code of its own; it can only connect out.
-    final web = service.isWebClient;
 
     return AlertDialog(
       title: const Text('Connect with code'),
@@ -77,39 +76,31 @@ class _ConnectDialogState extends State<_ConnectDialog> {
           mainAxisSize: .min,
           crossAxisAlignment: .start,
           children: [
-            if (web)
-              Text(
-                'On the other device, open Connect with code and type the '
-                'code it shows.',
-                style: text.bodyMedium,
-              )
-            else ...[
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.lg),
-                decoration: BoxDecoration(
-                  color: AppColors.background,
-                  borderRadius: BorderRadius.circular(AppRadius.md),
-                ),
-                child: Column(
-                  crossAxisAlignment: .start,
-                  children: [
-                    Text('THIS DEVICE\'S CODE', style: text.labelSmall),
-                    const SizedBox(height: AppSpacing.xs),
-                    SelectableText(
-                      myCode ?? 'No network',
-                      style: AppTheme.mono(fontSize: 18)
-                          .copyWith(letterSpacing: 1),
-                    ),
-                  ],
-                ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(AppSpacing.lg),
+              decoration: BoxDecoration(
+                color: AppColors.background,
+                borderRadius: BorderRadius.circular(AppRadius.md),
               ),
-              const SizedBox(height: AppSpacing.sm),
-              Text(
-                'Type it on the other device — or type theirs below.',
-                style: text.bodyMedium,
+              child: Column(
+                crossAxisAlignment: .start,
+                children: [
+                  Text('THIS DEVICE\'S CODE', style: text.labelSmall),
+                  const SizedBox(height: AppSpacing.xs),
+                  SelectableText(
+                    myCode ?? 'No network',
+                    style: AppTheme.mono(fontSize: 18)
+                        .copyWith(letterSpacing: 1),
+                  ),
+                ],
               ),
-            ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Text(
+              'Type it on the other device — or type theirs below.',
+              style: text.bodyMedium,
+            ),
             const SizedBox(height: AppSpacing.xl),
             TextField(
               controller: _controller,
@@ -126,11 +117,11 @@ class _ConnectDialogState extends State<_ConnectDialog> {
                 errorMaxLines: 3,
               ),
             ),
-            if (service.browserUrl case final url?) ...[
+            if (signalingUrl.isNotEmpty && service.showOnWeb) ...[
               const SizedBox(height: AppSpacing.xl),
               const Divider(),
               const SizedBox(height: AppSpacing.lg),
-              BrowserAddress(url: url),
+              const BrowserAddress(url: webAppUrl),
             ],
           ],
         ),
@@ -158,8 +149,7 @@ class _ConnectDialogState extends State<_ConnectDialog> {
 }
 
 /// "No app on the other device?" — a QR code that opens Wisp in its
-/// browser, already connected to this device. The link has this device's
-/// address in it, so it's scanned or copied rather than shown.
+/// browser, where this device shows up by itself.
 class BrowserAddress extends StatelessWidget {
   const BrowserAddress({super.key, required this.url});
 

@@ -101,10 +101,6 @@ class SettingsScreen extends StatelessWidget {
                           value: service.showOnWeb,
                           onChanged: service.setShowOnWeb,
                         ),
-                      ],
-                      // The link has the address in it, so it's copied,
-                      // not shown.
-                      if (service.browserUrl case final url?) ...[
                         const Divider(),
                         ListTile(
                           title: const Text('Link for browsers'),
@@ -114,8 +110,9 @@ class SettingsScreen extends StatelessWidget {
                           trailing: IconButton(
                             tooltip: 'Copy link',
                             icon: const Icon(Icons.link),
-                            onPressed: () =>
-                                Clipboard.setData(ClipboardData(text: url)),
+                            onPressed: () => Clipboard.setData(
+                              const ClipboardData(text: webAppUrl),
+                            ),
                           ),
                         ),
                       ],

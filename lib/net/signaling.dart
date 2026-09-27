@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:crypto/crypto.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 /// The signaling server (server/), set when building:
@@ -8,15 +9,13 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 /// Empty turns everything that needs the internet off.
 const signalingUrl = String.fromEnvironment('SIGNALING_URL');
 
+/// The web app (GitHub Pages), for devices without the app: it finds this
+/// one through the signaling server.
+const webAppUrl = 'https://domeepc.github.io/wisp/';
+
 /// Someone in our room on the signaling server: a device on the same
-/// network. [lan] is set for installed apps: their own web app.
-typedef RoomPeer = ({
-  String id,
-  String name,
-  String platform,
-  String? detail,
-  Uri? lan,
-});
+/// network.
+typedef RoomPeer = ({String id, String name, String platform, String? detail});
 
 /// A connection to the signaling server. Says who we are, keeps up with
 /// who else is in our room, and passes messages to them. Reconnects by
@@ -27,7 +26,7 @@ class Signaling {
 
   final Uri url;
 
-  /// Our entry in the room: id, name, platform, and detail or lan.
+  /// Our entry in the room: id, name, platform and detail.
   final Map<String, Object?> Function() self;
   final void Function(List<RoomPeer> peers)? onPeers;
   final void Function(String from, Object? data)? onSignal;
@@ -116,12 +115,22 @@ RoomPeer? _peer(Object? json) {
   if (json is! Map) return null;
   final (id, name) = (json['id'], json['name']);
   if (id is! String || name is! String) return null;
-  final lan = json['lan'];
   return (
     id: id,
     name: name,
     platform: json['platform'] as String? ?? 'browser',
     detail: json['detail'] as String?,
-    lan: lan is String ? Uri.tryParse(lan) : null,
   );
+}
+
+/// A WebRTC transfer's security code: the same four characters on both
+/// ends, from both DTLS fingerprints. If the signaling server swapped
+/// them, the codes wouldn't match.
+String rtcSecurityCode(String? localSdp, String? remoteSdp) {
+  final fingerprints = [
+    for (final sdp in [localSdp, remoteSdp])
+      RegExp(r'a=fingerprint:(\S+ \S+)').firstMatch(sdp ?? '')?.group(1) ?? '',
+  ]..sort();
+  final hash = sha256.convert(utf8.encode(fingerprints.join('|')));
+  return hash.toString().substring(0, 4).toUpperCase();
 }

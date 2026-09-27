@@ -8,33 +8,23 @@ import 'protocol.dart';
 /// like `7K3M-Q2XA`, so nobody has to deal with IP addresses.
 ///
 /// The code *is* the address, not a key to look it up: it packs the IPv4
-/// address (and both ports, only if they aren't the usual ones) behind a
-/// check byte, in Crockford base32. So it works without any server, a
+/// address (and the port, only if it isn't the usual one) behind a check
+/// byte, in Crockford base32. So it works without any server, a
 /// typo is caught instead of connecting somewhere else, and every device
 /// gets a different-looking code even on the same network.
-typedef DeviceAddress = ({String host, int port, int browserPort});
+typedef DeviceAddress = ({String host, int port});
 
 /// Crockford base32: no I, L, O or U, so nothing looks alike.
 const _alphabet = '0123456789ABCDEFGHJKMNPQRSTVWXYZ';
 
-/// The code for [host] (an IPv4 address) with this device's ports.
+/// The code for [host] (an IPv4 address) with this device's port.
 /// Null if [host] isn't an IPv4 address.
-String? encodeDeviceCode(
-  String host, {
-  int port = defaultServerPort,
-  int browserPort = defaultBrowserPort,
-}) {
+String? encodeDeviceCode(String host, {int port = defaultServerPort}) {
   final ip = _parseIpv4(host);
   if (ip == null) return null;
-  final usual = port == defaultServerPort && browserPort == defaultBrowserPort;
   final payload = [
     ...ip,
-    if (!usual) ...[
-      port >> 8,
-      port & 0xff,
-      browserPort >> 8,
-      browserPort & 0xff,
-    ],
+    if (port != defaultServerPort) ...[port >> 8, port & 0xff],
   ];
   final check = _check(payload);
   final bytes = [check, for (final b in payload) b ^ check];
@@ -45,38 +35,30 @@ String? encodeDeviceCode(
 /// don't matter, and O/I/L are read as 0/1/1. Null if it isn't a valid
 /// code (wrong length or a typo).
 DeviceAddress? decodeDeviceCode(String code) {
-  final chars = normalizeDeviceCode(code);
+  final chars = _normalize(code);
   if (chars == null) return null;
-  final bytes = _fromBase32(chars, chars.length == 8 ? 5 : 9);
+  final bytes = _fromBase32(chars, chars.length == 8 ? 5 : 7);
   if (bytes == null) return null;
   final check = bytes[0];
   final payload = [for (final b in bytes.skip(1)) b ^ check];
   if (_check(payload) != check) return null;
-  final host = payload.take(4).join('.');
-  if (payload.length == 4) {
-    return (
-      host: host,
-      port: defaultServerPort,
-      browserPort: defaultBrowserPort,
-    );
-  }
   return (
-    host: host,
-    port: payload[4] << 8 | payload[5],
-    browserPort: payload[6] << 8 | payload[7],
+    host: payload.take(4).join('.'),
+    port: payload.length == 4
+        ? defaultServerPort
+        : payload[4] << 8 | payload[5],
   );
 }
 
 /// [code] in canonical form (upper case, no dashes, look-alikes fixed), if
-/// it has the shape of a code at all — so callers can tell "mistyped
-/// code" apart from "not meant as a code".
-String? normalizeDeviceCode(String code) {
+/// it has the shape of a code at all.
+String? _normalize(String code) {
   final chars = code
       .toUpperCase()
       .replaceAll(RegExp(r'[\s-]'), '')
       .replaceAll('O', '0')
       .replaceAll(RegExp('[IL]'), '1');
-  if (chars.length != 8 && chars.length != 15) return null;
+  if (chars.length != 8 && chars.length != 12) return null;
   if (chars.split('').any((c) => !_alphabet.contains(c))) return null;
   return chars;
 }

@@ -12,15 +12,16 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:wisp/models/device.dart';
 import 'package:wisp/models/shared_file.dart';
 import 'package:wisp/models/transfer.dart';
-import 'package:wisp/net/browser/rtc_peers_web.dart';
+import 'package:wisp/net/rtc_peers.dart';
+import 'package:wisp/net/rtc_platform_web.dart';
 import 'package:wisp/net/server.dart' show Offer;
 import 'package:wisp/net/signaling.dart';
 
 void main() {
   test('a file goes from one browser to another', () async {
     final saved = <String, List<int>>{};
-    RtcPeers.save = (name, parts) =>
-        saved[name] = [for (final p in parts) ...p.asUint8List()];
+    ReceivedFile.save = (name, parts) =>
+        saved[name] = [for (final p in parts) ...p];
 
     Offer? offered;
     Transfer? received;
@@ -38,7 +39,7 @@ void main() {
             sessionId: offer.sessionId,
           );
         },
-      )..start();
+      )..paused = false;
     }
 
     final a = peer('rtc-a', 'Laptop');

@@ -13,6 +13,7 @@ import 'package:wisp/net/device_code.dart';
 import 'package:wisp/net/identity.dart';
 import 'package:wisp/net/protocol.dart';
 import 'package:wisp/net/server.dart';
+import 'package:wisp/net/signaling.dart';
 import 'package:wisp/services/wisp_service.dart';
 import 'package:wisp/utils/pick_files.dart';
 
@@ -24,8 +25,8 @@ void main() {
 
   setUp(() async {
     tmp = await Directory.systemTemp.createTemp('wisp_test');
-    a = WispService(name: 'A', saveDir: '${tmp.path}/a', port: 0, pagePort: 0);
-    b = WispService(name: 'B', saveDir: '${tmp.path}/b', port: 0, pagePort: 0);
+    a = WispService(name: 'A', saveDir: '${tmp.path}/a', port: 0);
+    b = WispService(name: 'B', saveDir: '${tmp.path}/b', port: 0);
     await a.start(discovery: false);
     await b.start(discovery: false);
     expect(a.startError, isNull);
@@ -161,10 +162,10 @@ void main() {
   });
 
   test('uploads without a valid session are rejected', () async {
-    final client = HttpClient();
+    final client = HttpClient()..badCertificateCallback = (_, _, _) => true;
     final req = await client.postUrl(
       Uri.parse(
-        'http://127.0.0.1:${b.browserPort}${Api.upload}'
+        'https://127.0.0.1:${b.self.port}${Api.upload}'
         '?sessionId=nope&fileId=0&token=nope',
       ),
     );
@@ -234,8 +235,11 @@ void main() {
   });
 
   group('connect with code', () {
+    String codeOf(WispService s) =>
+        encodeDeviceCode('127.0.0.1', port: s.self.port!)!;
+
     test('adds the device on both sides', () async {
-      final device = await a.connect('127.0.0.1:${b.self.port}');
+      final device = await a.connect(codeOf(b));
 
       expect(device.name, 'B');
       // Learned from the certificate it presented.
@@ -249,11 +253,7 @@ void main() {
       a.localAddress = '192.168.1.24';
       final code = a.connectCode!;
       expect(code, isNot(contains('192')));
-      expect(decodeDeviceCode(code), (
-        host: '192.168.1.24',
-        port: a.self.port,
-        browserPort: a.browserPort,
-      ));
+      expect(decodeDeviceCode(code), (host: '192.168.1.24', port: a.self.port));
     });
 
     test('connects with the other device\'s code', () async {
@@ -265,7 +265,7 @@ void main() {
     test('explains what went wrong', () async {
       expect(() => a.connect('not a code!'), throwsA(isA<ConnectException>()));
       expect(
-        () => a.connect('127.0.0.1:${a.self.port}'),
+        () => a.connect(codeOf(a)),
         throwsA(
           isA<ConnectException>().having(
             (e) => e.message,
@@ -274,27 +274,6 @@ void main() {
           ),
         ),
       );
-    });
-
-    test('parseConnectCode', () {
-      expect(parseConnectCode('192.168.1.24'), (
-        host: '192.168.1.24',
-        port: defaultServerPort,
-      ));
-      expect(parseConnectCode(' 10.0.0.5:4000 '), (
-        host: '10.0.0.5',
-        port: 4000,
-      ));
-      expect(parseConnectCode('24', localAddress: '192.168.1.110'), (
-        host: '192.168.1.24',
-        port: defaultServerPort,
-      ));
-      expect(parseConnectCode('24'), isNull); // no address to complete it
-      expect(parseConnectCode('300', localAddress: '192.168.1.1'), isNull);
-      expect(parseConnectCode('host/evil'), isNull);
-      expect(parseConnectCode('1.2.3.4:99999'), isNull);
-      final code = encodeDeviceCode('10.0.0.5', port: 4000)!;
-      expect(parseConnectCode(code), (host: '10.0.0.5', port: 4000));
     });
   });
 
@@ -305,22 +284,13 @@ void main() {
       expect(decodeDeviceCode(code), (
         host: '192.168.1.24',
         port: defaultServerPort,
-        browserPort: defaultBrowserPort,
       ));
     });
 
     test('other ports make a longer one', () {
-      final code = encodeDeviceCode(
-        '10.0.0.5',
-        port: 40000,
-        browserPort: 40001,
-      )!;
-      expect(code.replaceAll('-', ''), hasLength(15));
-      expect(decodeDeviceCode(code), (
-        host: '10.0.0.5',
-        port: 40000,
-        browserPort: 40001,
-      ));
+      final code = encodeDeviceCode('10.0.0.5', port: 40000)!;
+      expect(code.replaceAll('-', ''), hasLength(12));
+      expect(decodeDeviceCode(code), (host: '10.0.0.5', port: 40000));
     });
 
     test('typing is forgiving', () {
@@ -367,7 +337,6 @@ void main() {
       prefs: prefs,
       saveDir: '${tmp.path}/first',
       port: 0,
-      pagePort: 0,
     );
     await first.start(discovery: false);
     expect(first.startError, isNull);
@@ -376,7 +345,7 @@ void main() {
     expect(await first.setSaveDir('/definitely/not/here'), isFalse);
     await first.stop();
 
-    final second = WispService(prefs: prefs, port: 0, pagePort: 0);
+    final second = WispService(prefs: prefs, port: 0);
     await second.start(discovery: false);
     expect(second.startError, isNull);
     expect(second.self.id, first.self.id);
@@ -384,6 +353,36 @@ void main() {
     expect(second.self.name, 'Studio Mac');
     expect(second.saveDir, tmp.path);
     await second.stop();
+  });
+
+  test('offered files are checked and made safe', () {
+    final files = parseOfferedFiles([
+      {'name': '../../etc/passwd', 'size': 3},
+      {'name': 'Photos/a.jpg', 'size': 0},
+    ])!;
+    expect([for (final f in files) f.name], ['etc/passwd', 'Photos/a.jpg']);
+    expect(parseOfferedFiles([]), isNull);
+    expect(parseOfferedFiles('x'), isNull);
+    expect(
+      parseOfferedFiles([
+        {'name': 'a', 'size': -1},
+      ]),
+      isNull,
+    );
+    expect(
+      parseOfferedFiles([
+        {'name': 'a'},
+      ]),
+      isNull,
+    );
+  });
+
+  test('both ends of WebRTC get the same security code', () {
+    const a = 'v=0\r\na=fingerprint:sha-256 AA:BB\r\n';
+    const b = 'v=0\r\na=fingerprint:sha-256 CC:DD\r\n';
+    expect(rtcSecurityCode(a, b), rtcSecurityCode(b, a));
+    expect(rtcSecurityCode(a, b), hasLength(4));
+    expect(rtcSecurityCode(a, b), isNot(rtcSecurityCode(a, a)));
   });
 
   test('safeRelativePath keeps folders but nothing sneaky', () {

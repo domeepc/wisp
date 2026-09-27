@@ -1,13 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import 'package:wisp/main.dart';
 import 'package:wisp/models/device.dart';
 import 'package:wisp/models/shared_file.dart';
 import 'package:wisp/models/transfer.dart';
-import 'package:wisp/net/browser/browser_http.dart';
 import 'package:wisp/net/server.dart';
 import 'package:wisp/screens/home_screen.dart';
 import 'package:wisp/screens/incoming_sheet.dart';
@@ -292,46 +290,17 @@ void main() {
     expect(find.textContaining('doesn\'t look right'), findsOneWidget);
   });
 
-  testWidgets('connect dialog shows a code and a QR, never the IP', (
-    tester,
-  ) async {
+  testWidgets('connect dialog shows a code, never the IP', (tester) async {
     final service = _service()
       ..self = _service().self.copyWith(port: 53318)
-      ..localAddress = '192.168.1.24'
-      ..browserPort = 53319;
+      ..localAddress = '192.168.1.24';
     await _pumpApp(tester, _desktop, service);
 
     await tester.tap(find.text('Connect with code'));
     await tester.pump(const Duration(seconds: 1));
 
     expect(find.text(service.connectCode!), findsOneWidget);
-    expect(find.byType(QrImageView), findsOneWidget);
     expect(find.textContaining('192.168'), findsNothing);
-  });
-
-  testWidgets('sending to a browser waits for the download', (tester) async {
-    final transfer = Transfer(
-      direction: TransferDirection.send,
-      peer: _devices.last, // the iPad browser
-      files: _files,
-      securityCode: 'AB12',
-    );
-    await _pumpScreen(tester, TransferScreen(transfer: transfer), _service());
-
-    expect(find.text('Waiting for download'), findsOneWidget);
-    expect(find.textContaining('asked in their browser'), findsOneWidget);
-    expect(find.text('AB12'), findsNothing);
-  });
-
-  testWidgets('in a browser, the app asks to connect instead', (tester) async {
-    final service = WispService(name: 'Web', browserHttp: _NoNetwork());
-    await _pumpApp(tester, _phone, service);
-
-    expect(find.text('Connect to a Wisp device'), findsOneWidget);
-    await tester.tap(find.widgetWithText(FilledButton, 'Connect'));
-    await tester.pump(const Duration(seconds: 1));
-    expect(find.text('Other device\'s code'), findsOneWidget);
-    expect(find.text('THIS DEVICE\'S CODE'), findsNothing);
   });
 
   group('toasts', () {
@@ -418,29 +387,4 @@ void main() {
       await tester.pump(const Duration(seconds: 5));
     });
   });
-}
-
-/// A browser HTTP layer for widget tests that never gets anywhere.
-class _NoNetwork implements BrowserHttp {
-  @override
-  String get browserName => 'Chrome';
-
-  @override
-  Future<({int status, String body})> send(
-    String method,
-    Uri url, {
-    String? json,
-    void Function(void Function() abort)? onStart,
-  }) async => throw const BrowserHttpException('offline');
-
-  @override
-  Future<int> upload(
-    Uri url,
-    Uint8List bytes, {
-    required void Function(int sent) onProgress,
-    void Function(void Function() abort)? onStart,
-  }) async => throw const BrowserHttpException('offline');
-
-  @override
-  void download(Uri url) {}
 }

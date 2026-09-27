@@ -2,7 +2,7 @@
 //
 // Devices behind the same public IP, which usually means the same home
 // network, share a room. Everyone in a room sees who else is there, and
-// browsers pass WebRTC setup messages to each other through it. Files
+// devices pass WebRTC setup messages to each other through it. Files
 // never go through here: they go straight between the devices.
 
 export default {
@@ -17,7 +17,7 @@ export default {
 };
 
 /**
- * How browsers reach each other: STUN, plus a TURN relay (Cloudflare
+ * How devices reach each other: STUN, plus a TURN relay (Cloudflare
  * Realtime) once its key is set with `wrangler secret put TURN_KEY_ID` and
  * `TURN_KEY_API_TOKEN`. The relay is for networks where devices can't
  * connect directly, like iPhones on the same Wi-Fi.
@@ -119,15 +119,10 @@ export function cleanPeer(peer) {
   const id = text(peer.id, 64);
   const name = text(peer.name, 64);
   if (!id || !name) return null;
-  // An installed device's own web app, which must be on a local network:
-  // this is where browsers get sent, so no links to the internet.
-  const lan = text(peer.lan, 64);
-  const local = /^http:\/\/(10(\.\d{1,3}){3}|192\.168(\.\d{1,3}){2}|172\.(1[6-9]|2\d|3[01])(\.\d{1,3}){2}):\d{1,5}$/;
   return {
     id,
     name,
     platform: text(peer.platform, 16) ?? 'browser',
     detail: text(peer.detail, 40),
-    lan: lan && local.test(lan) ? lan : undefined,
   };
 }

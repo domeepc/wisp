@@ -18,20 +18,15 @@
 //   POST /api/wisp/v1/upload?sessionId=&fileId=&token=   ← raw file bytes
 //   POST /api/wisp/v1/cancel?sessionId=
 //
-// Browsers can't check a self-made certificate without scary warnings, so
-// the web app (browser_bridge.dart) is plain HTTP on
-// [defaultBrowserPort]. Browsers upload through the same prepare-upload /
-// upload / cancel endpoints there. That part is not encrypted.
+// Browsers, and devices the Wi-Fi hides from each other, meet in a room on
+// the signaling server instead and send over WebRTC (rtc_peers.dart).
 
 import 'dart:io';
 import 'dart:math';
 
-import 'device_code.dart';
-
 const protocolVersion = 'wisp/2';
 const discoveryPort = 53318;
 const defaultServerPort = 53318;
-const defaultBrowserPort = 53319;
 final multicastGroup = InternetAddress('224.0.0.168');
 
 const announceEvery = Duration(seconds: 3);
@@ -57,41 +52,6 @@ String randomHex(int bytes) => List.generate(
   bytes,
   (_) => _random.nextInt(256).toRadixString(16).padLeft(2, '0'),
 ).join();
-
-/// Reads a "Connect with code" code: an address like `192.168.1.24`, with
-/// an optional `:port`. On the same network, just the last number (`24`)
-/// works too — the rest is taken from [localAddress]. Returns null if the
-/// code makes no sense.
-({String host, int port})? parseConnectCode(
-  String code, {
-  String? localAddress,
-}) {
-  // Normally a device code (see device_code.dart); a raw address works too.
-  if (normalizeDeviceCode(code) != null) {
-    final address = decodeDeviceCode(code);
-    return address == null ? null : (host: address.host, port: address.port);
-  }
-  var host = code.trim();
-  var port = defaultServerPort;
-
-  final colon = host.lastIndexOf(':');
-  if (colon != -1) {
-    final parsed = int.tryParse(host.substring(colon + 1));
-    if (parsed == null || parsed < 1 || parsed > 65535) return null;
-    port = parsed;
-    host = host.substring(0, colon);
-  }
-
-  if (RegExp(r'^\d{1,3}$').hasMatch(host)) {
-    final last = int.parse(host);
-    final parts = localAddress?.split('.');
-    if (last > 255 || parts == null || parts.length != 4) return null;
-    host = [...parts.take(3), '$last'].join('.');
-  }
-
-  if (!RegExp(r'^[A-Za-z0-9.\-]+$').hasMatch(host)) return null;
-  return (host: host, port: port);
-}
 
 /// "Connect with code" didn't work; [message] says why, for the user.
 class ConnectException implements Exception {

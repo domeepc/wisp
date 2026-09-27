@@ -13,8 +13,6 @@ enum ToastTone {
 
   final Color color;
   final Color soft;
-
-  (Color, Color) get colors => (color, soft);
 }
 
 class ToastAction {
@@ -322,7 +320,7 @@ class _ToastBody extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final text = Theme.of(context).textTheme;
-    final (fg, bg) = content.tone.colors;
+    final ToastTone(color: fg, soft: bg) = content.tone;
     void close() => entry.owner.dismiss(entry.key);
 
     return DecoratedBox(

@@ -40,23 +40,3 @@ Future<void> replyJson(HttpRequest req, int status, Object body) async {
 /// Like [replyJson], but ignores errors (e.g. the client already left).
 Future<void> tryReplyJson(HttpRequest req, int status, Object body) =>
     replyJson(req, status, body).catchError((_) {});
-
-/// Whether a web page at [origin] may use the browser API: pages on this
-/// computer or the local network only, so no website on the internet can
-/// make your browser talk to your devices.
-bool isLocalOrigin(String origin) {
-  final uri = Uri.tryParse(origin);
-  if (uri == null || !(uri.scheme == 'http' || uri.scheme == 'https')) {
-    return false;
-  }
-  final host = uri.host;
-  if (host == 'localhost' || host == '127.0.0.1' || host == '::1') return true;
-  final List<int> ip;
-  try {
-    ip = Uri.parseIPv4Address(host);
-  } on FormatException {
-    return false;
-  }
-  final (a, b) = (ip[0], ip[1]);
-  return a == 10 || (a == 172 && b >= 16 && b <= 31) || (a == 192 && b == 168);
-}

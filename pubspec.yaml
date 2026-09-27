@@ -42,9 +42,9 @@ dependencies:
   basic_utils: ^5.8.2
   crypto: ^3.0.7
   web: ^1.1.1
-  archive: ^4.3.0
   web_socket_channel: ^3.0.3
   record: ^7.1.1
+  flutter_webrtc: ^1.6.2+hotfix.3
 
 dev_dependencies:
   flutter_test:
@@ -70,9 +70,7 @@ flutter:
   # the material Icons class.
   uses-material-design: true
 
-  # The page browsers get when they open this device's address.
   assets:
-    - assets/webapp/
     - assets/brand/app_icon.png
     # The fonts' licenses (SIL Open Font License) travel with them.
     - assets/fonts/InterTight-OFL.txt

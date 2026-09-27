@@ -39,7 +39,7 @@ Version: $version
 Architecture: amd64
 Maintainer: Wisp
 Depends: libgtk-3-0
-Recommends: zenity, pulseaudio-utils, ffmpeg
+Recommends: zenity, pulseaudio-utils
 Section: net
 Priority: optional
 Description: Send files to devices on your Wi-Fi
