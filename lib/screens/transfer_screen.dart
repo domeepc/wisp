@@ -79,55 +79,80 @@ class _TransferView extends StatelessWidget {
         child: Center(
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 520),
-            child: ListView(
-              padding: const EdgeInsets.all(AppSpacing.xl),
-              children: [
-                Text(
-                  sending ? 'To' : 'From',
-                  style: text.bodyMedium,
-                  textAlign: .center,
-                ),
-                const SizedBox(height: AppSpacing.xs),
-                Row(
-                  mainAxisAlignment: .center,
-                  children: [
-                    Icon(t.peer.platform.icon, color: AppColors.accent),
-                    const SizedBox(width: AppSpacing.md),
-                    Flexible(
-                      child: Text(
-                        t.peer.name,
-                        style: text.headlineSmall,
-                        overflow: .ellipsis,
+            child: CustomScrollView(
+              slivers: [
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.xl,
+                    AppSpacing.xl,
+                    AppSpacing.xl,
+                    0,
+                  ),
+                  sliver: SliverList.list(
+                    children: [
+                      Text(
+                        sending ? 'To' : 'From',
+                        style: text.bodyMedium,
+                        textAlign: .center,
                       ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: AppSpacing.xxl),
-                Center(
-                  child: _ProgressRing(
-                    progress: t.progress,
-                    caption: t.status == TransferStatus.waiting
-                        ? 'Waiting to accept'
-                        : '${formatBytes(t.bytesDone)} of '
-                              '${formatBytes(t.totalBytes)}',
+                      const SizedBox(height: AppSpacing.xs),
+                      Row(
+                        mainAxisAlignment: .center,
+                        children: [
+                          Icon(t.peer.platform.icon, color: AppColors.accent),
+                          const SizedBox(width: AppSpacing.md),
+                          Flexible(
+                            child: Text(
+                              t.peer.name,
+                              style: text.headlineSmall,
+                              overflow: .ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: AppSpacing.xxl),
+                      Center(
+                        child: _ProgressRing(
+                          progress: t.progress,
+                          caption: t.status == TransferStatus.waiting
+                              ? 'Waiting to accept'
+                              : '${formatBytes(t.bytesDone)} of '
+                                    '${formatBytes(t.totalBytes)}',
+                        ),
+                      ),
+                      const SizedBox(height: AppSpacing.xxl),
+                      ..._middle(context),
+                      const SizedBox(height: AppSpacing.lg),
+                    ],
                   ),
                 ),
-                const SizedBox(height: AppSpacing.xxl),
-                ..._middle(context),
-                const SizedBox(height: AppSpacing.lg),
-                Card(
-                  child: Column(
-                    children: [
-                      for (final (i, file) in t.files.indexed) ...[
-                        if (i > 0) const Divider(),
-                        _FileProgressRow(
-                          file: file,
-                          sent: t.fileBytesDone[i],
-                          transferActive: active,
-                          doneLabel: sending ? 'Sent' : 'Saved',
-                        ),
-                      ],
-                    ],
+                // A folder can be thousands of files, and this redraws ten
+                // times a second: only the rows on screen are built.
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(
+                    AppSpacing.xl,
+                    0,
+                    AppSpacing.xl,
+                    AppSpacing.xl,
+                  ),
+                  sliver: DecoratedSliver(
+                    decoration: ShapeDecoration(
+                      color: AppColors.surface,
+                      // Looks like the Card it used to be.
+                      shape:
+                          Theme.of(context).cardTheme.shape ??
+                          const RoundedRectangleBorder(),
+                    ),
+                    sliver: SliverList.separated(
+                      itemCount: t.files.length,
+                      separatorBuilder: (_, _) => const Divider(),
+                      itemBuilder: (context, i) => _FileProgressRow(
+                        file: t.files[i],
+                        sent: t.fileBytesDone[i],
+                        transferActive: active,
+                        doneLabel: sending ? 'Sent' : 'Saved',
+                      ),
+                    ),
                   ),
                 ),
               ],

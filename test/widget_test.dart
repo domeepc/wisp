@@ -173,6 +173,20 @@ void main() {
     expect(find.widgetWithText(FilledButton, 'Done'), findsOneWidget);
   });
 
+  testWidgets('transfer screen builds only the file rows on screen', (
+    tester,
+  ) async {
+    final transfer = Transfer(
+      direction: TransferDirection.receive,
+      peer: _devices.first,
+      files: [for (var i = 0; i < 5000; i++) SharedFile('photo-$i.jpg', 1024)],
+      securityCode: 'AB12',
+    )..setStatus(TransferStatus.running);
+    await _pumpScreen(tester, TransferScreen(transfer: transfer), _service());
+    expect(find.text('photo-0.jpg', skipOffstage: false), findsOneWidget);
+    expect(find.text('photo-4999.jpg', skipOffstage: false), findsNothing);
+  });
+
   testWidgets('transfer screen explains a decline', (tester) async {
     final transfer = Transfer(
       direction: TransferDirection.send,

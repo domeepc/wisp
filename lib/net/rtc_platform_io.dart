@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
+import 'batched_writer.dart';
 import 'server.dart' show WispServer;
 
 /// Apps have no browser name to show.
@@ -24,16 +25,25 @@ class ReceivedFile {
 
   static Future<ReceivedFile> create(String? dir, String name) async {
     final file = WispServer.createUnique(dir!, name);
-    return ReceivedFile._(file, await file.open(mode: FileMode.write));
+    return ReceivedFile._(
+      file,
+      BatchedWriter(await file.open(mode: FileMode.write)),
+    );
   }
 
   final File _file;
-  final RandomAccessFile _out;
+  final BatchedWriter _out;
 
-  Future<void> add(Uint8List data) => _out.writeFrom(data);
+  Future<void> add(Uint8List data) => _out.add(data);
 
   /// Where it was saved.
   Future<String?> close() async {
+    try {
+      await _out.flush();
+    } catch (_) {
+      await abort();
+      rethrow;
+    }
     await _out.close();
     return _file.path;
   }
