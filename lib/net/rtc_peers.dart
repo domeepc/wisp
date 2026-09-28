@@ -58,7 +58,12 @@ class RtcPeers {
   bool owns(String id) => _peers.containsKey(id);
 
   /// Paused (hidden): out of the room, so nobody sees us.
-  set paused(bool value) => value ? _signaling.stop() : _signaling.start();
+  set paused(bool value) {
+    if (value) return _signaling.stop();
+    _signaling.start();
+    // Fetched ahead, so a transfer doesn't wait for it (see _iceServers).
+    unawaited(_iceServers());
+  }
 
   void stop() {
     _signaling.stop();
@@ -121,13 +126,9 @@ class RtcPeers {
           for (var at = 0; at < chunk.length; at += _chunkSize) {
             if (!t.status.isActive) return;
             final end = min(at + _chunkSize, chunk.length);
-            await s.roomToSend();
-            // A copy of exactly this piece: some browsers send a view's
-            // whole underlying buffer.
+            await s.roomToSend(end - at);
             await s.channel!.send(
-              RTCDataChannelMessage.fromBinary(
-                Uint8List.fromList(chunk.sublist(at, end)),
-              ),
+              RTCDataChannelMessage.fromBinary(_piece(chunk, at, end)),
             );
             sent += end - at;
             t.setFileProgress(i, sent);
@@ -285,9 +286,24 @@ class RtcPeers {
     return pc;
   }
 
-  /// STUN, plus the signaling server's TURN relay if it has one. Asked for
-  /// each transfer, since the relay's logins expire.
-  Future<Map<String, dynamic>> _iceServers() async {
+  /// STUN, plus the signaling server's TURN relay if it has one. Asking
+  /// takes a round trip or two (the server asks Cloudflare for relay
+  /// logins), which both ends used to wait for on every transfer before
+  /// the other side even heard of it. So it's kept for an hour; the
+  /// logins last a day.
+  Future<Map<String, dynamic>> _iceServers() {
+    final age = DateTime.now().difference(_iceAt);
+    if (_ice == null || age > const Duration(hours: 1)) {
+      _iceAt = DateTime.now();
+      _ice = _fetchIceServers();
+    }
+    return _ice!;
+  }
+
+  Future<Map<String, dynamic>>? _ice;
+  DateTime _iceAt = DateTime(0);
+
+  Future<Map<String, dynamic>> _fetchIceServers() async {
     final url = _signaling.url;
     try {
       return await fetchJson(
@@ -297,6 +313,7 @@ class RtcPeers {
         ),
       ).timeout(const Duration(seconds: 5));
     } catch (_) {
+      _iceAt = DateTime(0); // ask again next time
       // Devices that can see each other still connect.
       return {
         'iceServers': [
@@ -322,6 +339,21 @@ class RtcPeers {
 
 /// 64 KB: what every browser's data channels take in one message.
 const _chunkSize = 64 * 1024;
+
+/// Exactly bytes [at] to [end] of [chunk], in a buffer of their own: some
+/// browsers send a view's whole underlying buffer. Copies only if it has
+/// to; a copy of every piece costs, in the web app most of all (there,
+/// copying into a new list goes byte by byte between Dart and the
+/// browser).
+Uint8List _piece(List<int> chunk, int at, int end) {
+  if (chunk is! Uint8List) return Uint8List.fromList(chunk.sublist(at, end));
+  final whole =
+      at == 0 &&
+      end == chunk.length &&
+      chunk.offsetInBytes == 0 &&
+      chunk.buffer.lengthInBytes == end;
+  return whole ? chunk : chunk.sublist(at, end);
+}
 
 class _Lost implements Exception {
   const _Lost();
@@ -386,8 +418,17 @@ class _Session {
     return _next.current;
   }
 
-  /// Waits while too much is queued, so a big file doesn't pile up.
-  Future<void> roomToSend() async {
+  /// Bytes about to be sent since we last looked at the queue.
+  int _unchecked = 0;
+
+  /// Waits while too much is queued, so a big file doesn't pile up. In the
+  /// apps, asking how much is queued is a trip to the platform side and
+  /// back, so it's asked every 256 KB rather than for every piece.
+  Future<void> roomToSend(int bytes) async {
+    if (_messages.isClosed) throw const _Lost();
+    _unchecked += bytes;
+    if (_unchecked < 256 * 1024) return;
+    _unchecked = 0;
     while (await channel!.getBufferedAmount() > 1024 * 1024) {
       if (_messages.isClosed) throw const _Lost();
       await Future<void>.delayed(const Duration(milliseconds: 10));

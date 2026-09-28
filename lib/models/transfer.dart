@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'device.dart';
@@ -69,7 +71,10 @@ class Transfer extends ChangeNotifier {
 
   late final int totalBytes = files.fold(0, (sum, f) => sum + f.bytes);
 
-  int get bytesDone => fileBytesDone.fold(0, (sum, b) => sum + b);
+  /// Kept as a running total: summing thousands of files for every piece
+  /// that arrives adds up.
+  int get bytesDone => _bytesDone;
+  int _bytesDone = 0;
 
   double get progress => totalBytes == 0
       ? (status == TransferStatus.done ? 1 : 0)
@@ -85,12 +90,17 @@ class Transfer extends ChangeNotifier {
       finishedAt = DateTime.now();
       speed = 0;
     }
+    _notifyLater?.cancel();
+    _notifyLater = null;
+    _lastNotify = DateTime.now();
     notifyListeners();
   }
 
   // Progress arrives in small chunks; rebuilding the UI for every chunk is
   // wasteful, so notify at most every 100 ms and sample speed every 500 ms.
+  static const _notifyEvery = Duration(milliseconds: 100);
   DateTime _lastNotify = DateTime(0);
+  Timer? _notifyLater;
   DateTime _sampleAt = DateTime.now();
   int _sampleBytes = 0;
 
@@ -103,21 +113,34 @@ class Transfer extends ChangeNotifier {
 
   void addProgress(int fileIndex, int bytes) {
     fileBytesDone[fileIndex] += bytes;
+    _bytesDone += bytes;
     final now = DateTime.now();
 
     final elapsed = now.difference(_sampleAt).inMilliseconds;
     if (elapsed >= 500) {
-      final done = bytesDone;
-      final instant = (done - _sampleBytes) * 1000 / elapsed;
+      final instant = (_bytesDone - _sampleBytes) * 1000 / elapsed;
       speed = speed == 0 ? instant : speed * 0.6 + instant * 0.4;
       _sampleAt = now;
-      _sampleBytes = done;
+      _sampleBytes = _bytesDone;
     }
+    _notifySoon(now);
+  }
 
-    final fileFinished = fileBytesDone[fileIndex] >= files[fileIndex].bytes;
-    if (fileFinished || now.difference(_lastNotify).inMilliseconds >= 100) {
+  /// Notifies now if it's been 100 ms, otherwise once 100 ms are up. So
+  /// the screen always catches up with the latest progress, even when the
+  /// data then pauses (between files, or waiting for the other side).
+  void _notifySoon(DateTime now) {
+    if (_notifyLater != null) return;
+    final wait = _notifyEvery - now.difference(_lastNotify);
+    if (wait <= Duration.zero) {
       _lastNotify = now;
       notifyListeners();
+      return;
     }
+    _notifyLater = Timer(wait, () {
+      _notifyLater = null;
+      _lastNotify = DateTime.now();
+      notifyListeners();
+    });
   }
 }

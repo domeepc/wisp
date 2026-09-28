@@ -6,6 +6,7 @@ import 'package:path/path.dart' as p;
 import '../models/device.dart';
 import '../models/shared_file.dart';
 import '../models/transfer.dart';
+import 'batched_writer.dart';
 import 'http_utils.dart';
 import 'identity.dart';
 import 'protocol.dart';
@@ -180,7 +181,7 @@ class WispServer {
     final transfer = session.transfer;
     final expected = transfer.files[index].bytes;
     final file = createUnique(transfer.saveDir!, transfer.files[index].name);
-    final out = await file.open(mode: FileMode.write);
+    final out = BatchedWriter(await file.open(mode: FileMode.write));
     var received = 0;
     var ok = false;
     try {
@@ -188,10 +189,11 @@ class WispServer {
         if (session.cancelled) throw const HttpError(410, 'Cancelled');
         received += chunk.length;
         if (received > expected) throw const HttpError(400, 'Too much data');
-        await out.writeFrom(chunk);
+        await out.add(chunk);
         transfer.addProgress(index, chunk.length);
       }
       if (received != expected) throw const HttpError(400, 'Incomplete');
+      await out.flush();
       ok = true;
     } on HttpError catch (e) {
       if (!session.cancelled) {
