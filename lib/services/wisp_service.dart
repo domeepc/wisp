@@ -171,7 +171,7 @@ class WispService extends ChangeNotifier {
       saveDir ??= await _defaultSaveDir();
       localAddress = await _findLocalAddress();
       final identity = await _loadIdentity();
-      await _server.start(port: port, tls: identity.serverContext);
+      await _server.start(port: port, identity: identity);
       self = self.copyWith(
         port: _server.port,
         fingerprint: identity.fingerprint,

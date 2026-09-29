@@ -1,11 +1,14 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:isolate';
 
 import '../models/device.dart';
+import '../models/shared_file.dart';
 import '../models/transfer.dart';
 import 'identity.dart';
 import 'protocol.dart';
+import 'transfer_mirror.dart';
 
 /// The sending side: talks to other devices' [WispServer]s.
 class WispClient {
@@ -75,7 +78,57 @@ class WispClient {
 
   /// Runs [transfer] to completion, updating its status and progress.
   /// Never throws — failures end up in `transfer.status`/`transfer.error`.
+  ///
+  /// The bytes go from a background isolate, so pushing them through TLS
+  /// doesn't compete with drawing the screen. Files only the main isolate
+  /// can read (see [SharedFile.portable]) are sent from here instead.
   Future<void> send(Transfer transfer) async {
+    if (!transfer.files.every((f) => f.portable)) return _send(transfer);
+
+    final messages = ReceivePort();
+    SendPort? commands;
+    var cancelled = false;
+    transfer.onCancel = () {
+      cancelled = true;
+      commands?.send('cancel');
+      transfer.setStatus(TransferStatus.cancelled);
+    };
+    try {
+      await Isolate.spawn(
+        _sendJob,
+        (
+          reply: messages.sendPort,
+          self: self(),
+          peer: transfer.peer,
+          files: transfer.files,
+          sessionId: transfer.sessionId,
+          securityCode: transfer.securityCode,
+        ),
+        onExit: messages.sendPort,
+        debugName: 'Wisp send',
+      );
+    } on Object {
+      messages.close();
+      if (cancelled) return;
+      return _send(transfer);
+    }
+    await for (final msg in messages) {
+      switch (msg) {
+        case final SendPort port:
+          commands = port;
+          if (cancelled) port.send('cancel');
+        case final TransferUpdate update:
+          update.applyTo(transfer);
+        case null: // done
+          messages.close();
+      }
+    }
+    if (transfer.status.isActive) {
+      transfer.setStatus(TransferStatus.failed, error: 'Transfer failed');
+    }
+  }
+
+  Future<void> _send(Transfer transfer) async {
     final peer = transfer.peer;
     final sessionId = transfer.sessionId;
     if (peer.fingerprint == null) {
@@ -208,4 +261,34 @@ class WispClient {
     HttpException() => 'Lost connection to ${peer.name}',
     _ => 'Transfer failed',
   };
+}
+
+typedef _SendJob = ({
+  SendPort reply,
+  Device self,
+  Device peer,
+  List<SharedFile> files,
+  String sessionId,
+  String securityCode,
+});
+
+/// The background isolate for one send: runs it on its own [Transfer],
+/// whose changes [WispClient.send] copies onto the one the screens watch.
+Future<void> _sendJob(_SendJob job) async {
+  final commands = ReceivePort();
+  job.reply.send(commands.sendPort);
+  final transfer = Transfer(
+    direction: TransferDirection.send,
+    peer: job.peer,
+    files: job.files,
+    securityCode: job.securityCode,
+    sessionId: job.sessionId,
+  );
+  mirrorTransfer(transfer, job.reply.send);
+  commands.listen((_) => transfer.cancel());
+  try {
+    await WispClient(self: () => job.self)._send(transfer);
+  } finally {
+    commands.close();
+  }
 }
