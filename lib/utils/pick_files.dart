@@ -27,11 +27,9 @@ Future<List<SharedFile>> pickFiles({bool media = false}) async {
       SharedFile(
         f.name,
         f.lengthSync() ?? await f.length() ?? 0,
+        path: f.path,
         // On Android picked files can be content:// URIs with no path.
-        source: switch (f.path) {
-          final path? => File(path).openRead,
-          null => f.readAsByteStream,
-        },
+        source: f.path == null ? f.readAsByteStream : null,
       ),
   ];
 }
@@ -56,7 +54,7 @@ Future<List<SharedFile>> filesFromPaths(Iterable<String> paths) async {
           SharedFile(
             p.split(p.relative(entry.path, from: root)).join('/'),
             await entry.length(),
-            source: entry.openRead,
+            path: entry.path,
           ),
         );
       }

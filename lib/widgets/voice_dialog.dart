@@ -114,11 +114,7 @@ class _VoiceDialogState extends State<_VoiceDialog> {
         sampleRate: _config.sampleRate,
         channels: _config.numChannels,
       );
-      final file = SharedFile(
-        _fileName(DateTime.now()),
-        data.length,
-        source: () => Stream.value(data),
-      );
+      final file = SharedFile.data(_fileName(DateTime.now()), data);
       if (mounted) Navigator.pop(context, file);
     } on Exception {
       _fail('Couldn\'t save the recording.');

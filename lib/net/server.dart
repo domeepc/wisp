@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:isolate';
 
 import 'package:path/path.dart' as p;
 
@@ -10,6 +11,7 @@ import 'batched_writer.dart';
 import 'http_utils.dart';
 import 'identity.dart';
 import 'protocol.dart';
+import 'transfer_mirror.dart';
 
 /// Someone wants to send us files; waiting for the user to decide.
 class Offer {
@@ -29,6 +31,11 @@ class Offer {
 }
 
 /// The receiving side: other Wisp apps send files here, over HTTPS.
+///
+/// The server itself runs on a background isolate (see [_ServerCore]), so
+/// taking in files — TLS, HTTP, writing to disk — doesn't compete with
+/// drawing the screen. This side answers its questions (who are we, does
+/// the user accept?) and keeps the screens' [Transfer]s up to date.
 class WispServer {
   WispServer({
     required this.self,
@@ -47,15 +54,202 @@ class WispServer {
   /// The sender gave up before the user decided.
   final void Function(String sessionId) onOfferCancelled;
 
+  Isolate? _isolate;
+  SendPort? _commands;
+  Completer<void>? _exited;
+  int _port = 0;
+
+  /// Receiving transfers, by session id.
+  final _transfers = <String, Transfer>{};
+
+  /// The port other apps connect to.
+  int get port => _port;
+
+  /// Listens on [port], or on any free one if it's taken (e.g. a second
+  /// copy of the app on the same computer).
+  Future<void> start({required int port, required Identity identity}) async {
+    final messages = ReceivePort();
+    final ready = Completer<void>();
+    final exited = _exited = Completer<void>();
+    messages.listen((msg) {
+      switch (msg) {
+        case ('ready', final SendPort commands, final int port):
+          _commands = commands;
+          _port = port;
+          ready.complete();
+        case ('failed', final String error):
+          if (!ready.isCompleted) ready.completeError(error);
+        case ('self', final int id, _):
+          _reply(id, self());
+        case ('register', final Device device):
+          onRegister(device);
+        case ('offer', final int id, final Offer offer):
+          _offer(id, offer);
+        case ('offerCancelled', final String sessionId):
+          onOfferCancelled(sessionId);
+        case ('update', final String sessionId, final TransferUpdate update):
+          final transfer = _transfers[sessionId];
+          if (transfer == null) return;
+          update.applyTo(transfer);
+          if (!update.status.isActive) _transfers.remove(sessionId);
+        case null: // the isolate is gone
+          messages.close();
+          _commands = null;
+          for (final t in _transfers.values) {
+            t.setStatus(TransferStatus.failed, error: 'Connection lost');
+          }
+          _transfers.clear();
+          if (!ready.isCompleted) ready.completeError('Server stopped');
+          exited.complete();
+      }
+    });
+    _isolate = await Isolate.spawn(
+      _serve,
+      (reply: messages.sendPort, port: port, identity: identity),
+      onExit: messages.sendPort,
+      debugName: 'Wisp server',
+    );
+    await ready.future;
+  }
+
+  Future<void> stop() async {
+    final commands = _commands;
+    _commands = null;
+    if (commands == null) return;
+    commands.send('stop');
+    await _exited!.future.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () => _isolate?.kill(),
+    );
+  }
+
+  Future<void> _offer(int id, Offer offer) async {
+    Transfer? accepted;
+    try {
+      accepted = await onOffer(offer);
+    } catch (_) {
+      // Counts as declined.
+    }
+    if (accepted case final transfer?) {
+      _transfers[offer.sessionId] = transfer;
+      transfer.onCancel = () {
+        _commands?.send(('cancel', offer.sessionId));
+        transfer.setStatus(TransferStatus.cancelled);
+      };
+    }
+    _reply(id, (accepted != null, accepted?.saveDir));
+  }
+
+  void _reply(int id, Object? value) => _commands?.send(('reply', id, value));
+
+  /// Creates [relative] (a [safeRelativePath]) inside [dir], adding
+  /// ` (1)`, ` (2)`… to the file name if it already exists.
+  static File createUnique(String dir, String relative) {
+    final segments = relative.split('/');
+    final name = segments.removeLast();
+    final parent = Directory(p.joinAll([dir, ...segments]))
+      ..createSync(recursive: true);
+
+    // A folder that already existed could be a symlink pointing elsewhere.
+    final root = Directory(dir).resolveSymbolicLinksSync();
+    final real = parent.resolveSymbolicLinksSync();
+    if (real != root && !p.isWithin(root, real)) {
+      throw const HttpError(400, 'Bad path');
+    }
+
+    final base = p.basenameWithoutExtension(name);
+    final ext = p.extension(name);
+    for (var n = 0; ; n++) {
+      final file = File(p.join(parent.path, n == 0 ? name : '$base ($n)$ext'));
+      try {
+        file.createSync(exclusive: true);
+        return file;
+      } on FileSystemException {
+        if (!file.existsSync()) rethrow; // a real error, not a name clash
+      }
+    }
+  }
+}
+
+typedef _ServeJob = ({SendPort reply, int port, Identity identity});
+
+/// The background isolate: runs the server, and asks [WispServer] on the
+/// main isolate whatever only it knows.
+Future<void> _serve(_ServeJob job) async {
+  final commands = ReceivePort();
+  final replies = <int, Completer<Object?>>{};
+  var nextId = 0;
+  Future<Object?> ask(String what, [Object? about]) {
+    final id = nextId++;
+    job.reply.send((what, id, about));
+    return (replies[id] = Completer()).future;
+  }
+
+  final transfers = <String, Transfer>{};
+  final core = _ServerCore(
+    self: () async => await ask('self') as Device,
+    onRegister: (device) => job.reply.send(('register', device)),
+    onOffer: (offer) async {
+      final (accepted, saveDir) = await ask('offer', offer) as (bool, String?);
+      if (!accepted) return null;
+      final id = offer.sessionId;
+      final transfer = transfers[id] = Transfer(
+        direction: TransferDirection.receive,
+        peer: offer.from,
+        files: offer.files,
+        securityCode: offer.securityCode,
+        sessionId: id,
+        saveDir: saveDir,
+      );
+      mirrorTransfer(transfer, (update) {
+        if (!update.status.isActive) transfers.remove(id);
+        job.reply.send(('update', id, update));
+      });
+      return transfer;
+    },
+    onOfferCancelled: (id) => job.reply.send(('offerCancelled', id)),
+  );
+
+  commands.listen((msg) async {
+    switch (msg) {
+      case ('reply', final int id, final Object? value):
+        replies.remove(id)?.complete(value);
+      case ('cancel', final String sessionId):
+        transfers[sessionId]?.cancel();
+      case 'stop':
+        await core.stop();
+        Isolate.exit();
+    }
+  });
+  try {
+    await core.start(port: job.port, tls: job.identity.serverContext);
+    job.reply.send(('ready', commands.sendPort, core.port));
+  } catch (e) {
+    job.reply.send(('failed', '$e'));
+    Isolate.exit();
+  }
+}
+
+/// The server itself, on the background isolate.
+class _ServerCore {
+  _ServerCore({
+    required this.self,
+    required this.onRegister,
+    required this.onOffer,
+    required this.onOfferCancelled,
+  });
+
+  final Future<Device> Function() self;
+  final void Function(Device device) onRegister;
+  final Future<Transfer?> Function(Offer offer) onOffer;
+  final void Function(String sessionId) onOfferCancelled;
+
   HttpServer? _secure;
   final _sessions = <String, _Session>{};
   String? _pendingOfferId;
 
-  /// The port other apps connect to.
   int get port => _secure?.port ?? 0;
 
-  /// Listens on [port], or on any free one if it's taken (e.g. a second
-  /// copy of the app on the same computer).
   Future<void> start({required int port, required SecurityContext tls}) async {
     try {
       _secure = await HttpServer.bindSecure(InternetAddress.anyIPv4, port, tls);
@@ -74,7 +268,7 @@ class WispServer {
     try {
       switch ((req.method, req.uri.path)) {
         case ('GET', Api.info):
-          await replyJson(req, 200, self().toJson());
+          await replyJson(req, 200, (await self()).toJson());
         case ('POST', Api.register):
           await _register(req);
         case ('POST', Api.prepareUpload):
@@ -99,8 +293,9 @@ class WispServer {
       host: remoteAddress(req),
     );
     if (device == null) throw const HttpError(400, 'Bad device info');
-    if (device.id != self().id) onRegister(device);
-    await replyJson(req, 200, self().toJson());
+    final me = await self();
+    if (device.id != me.id) onRegister(device);
+    await replyJson(req, 200, me.toJson());
   }
 
   Future<void> _prepareUpload(HttpRequest req) async {
@@ -137,7 +332,10 @@ class WispServer {
           files: files,
           // It comes from our own certificate, so it only matches the
           // sender's if they really connected to us.
-          securityCode: securityCode(self().fingerprint ?? '', sessionId),
+          securityCode: securityCode(
+            (await self()).fingerprint ?? '',
+            sessionId,
+          ),
         ),
       );
     } finally {
@@ -180,7 +378,10 @@ class WispServer {
 
     final transfer = session.transfer;
     final expected = transfer.files[index].bytes;
-    final file = createUnique(transfer.saveDir!, transfer.files[index].name);
+    final file = WispServer.createUnique(
+      transfer.saveDir!,
+      transfer.files[index].name,
+    );
     final out = BatchedWriter(await file.open(mode: FileMode.write));
     var received = 0;
     var ok = false;
@@ -233,34 +434,6 @@ class WispServer {
       onOfferCancelled(sessionId);
     }
     await replyJson(req, 200, {});
-  }
-
-  /// Creates [relative] (a [safeRelativePath]) inside [dir], adding
-  /// ` (1)`, ` (2)`… to the file name if it already exists.
-  static File createUnique(String dir, String relative) {
-    final segments = relative.split('/');
-    final name = segments.removeLast();
-    final parent = Directory(p.joinAll([dir, ...segments]))
-      ..createSync(recursive: true);
-
-    // A folder that already existed could be a symlink pointing elsewhere.
-    final root = Directory(dir).resolveSymbolicLinksSync();
-    final real = parent.resolveSymbolicLinksSync();
-    if (real != root && !p.isWithin(root, real)) {
-      throw const HttpError(400, 'Bad path');
-    }
-
-    final base = p.basenameWithoutExtension(name);
-    final ext = p.extension(name);
-    for (var n = 0; ; n++) {
-      final file = File(p.join(parent.path, n == 0 ? name : '$base ($n)$ext'));
-      try {
-        file.createSync(exclusive: true);
-        return file;
-      } on FileSystemException {
-        if (!file.existsSync()) rethrow; // a real error, not a name clash
-      }
-    }
   }
 }
 

@@ -161,6 +161,75 @@ void main() {
     expect(sent.status, TransferStatus.cancelled);
   });
 
+  group('mid-transfer', () {
+    // Big enough to still be going when the test steps in.
+    late File big;
+    setUp(() {
+      big = File('${tmp.path}/big.bin')
+        ..writeAsBytesSync(List.filled(64 * 1024 * 1024, 7));
+      b.incoming.listen((r) => r.accept());
+    });
+
+    Future<void> until(bool Function() done, String what) async {
+      final deadline = DateTime.now().add(const Duration(seconds: 10));
+      while (!done()) {
+        if (DateTime.now().isAfter(deadline)) fail('Never: $what');
+        await Future<void>.delayed(const Duration(milliseconds: 10));
+      }
+    }
+
+    test('the sender cancelling stops both sides', () async {
+      final sent = a.send(bAsSeenByA(), [SharedFile.fromPath(big.path)]);
+      await until(() => sent.bytesDone > 0, 'sending');
+      sent.cancel();
+      expect(sent.status, TransferStatus.cancelled);
+
+      final received = b.transfers.single;
+      await until(() => !received.status.isActive, 'receiver stopped');
+      expect(received.status, isNot(TransferStatus.done));
+      // The half-received file is cleaned up.
+      await until(
+        () => Directory('${tmp.path}/b').listSync().isEmpty,
+        'partial file removed',
+      );
+    });
+
+    test('the receiver cancelling stops both sides', () async {
+      final sent = a.send(bAsSeenByA(), [SharedFile.fromPath(big.path)]);
+      await until(() => b.transfers.isNotEmpty, 'offer');
+      final received = b.transfers.single;
+      await until(() => received.bytesDone > 0, 'receiving');
+      received.cancel();
+      expect(received.status, TransferStatus.cancelled);
+
+      await until(() => !sent.status.isActive, 'sender stopped');
+      expect(sent.status, isNot(TransferStatus.done));
+    });
+
+    test('stopping the app fails what it was receiving', () async {
+      a.send(bAsSeenByA(), [SharedFile.fromPath(big.path)]);
+      await until(() => b.transfers.isNotEmpty, 'offer');
+      final received = b.transfers.single;
+      await until(() => received.bytesDone > 0, 'receiving');
+      await b.stop();
+      expect(received.status, TransferStatus.failed);
+    });
+  });
+
+  test('files only the main isolate can read are still sent', () async {
+    b.incoming.listen((r) => r.accept());
+    final data = List.generate(300 * 1024, (i) => i % 251);
+    final sent = a.send(bAsSeenByA(), [
+      SharedFile('stream.bin', data.length, source: () => Stream.value(data)),
+      SharedFile.text('and some text'),
+    ]);
+    await finished(sent);
+
+    expect(sent.status, TransferStatus.done, reason: sent.error);
+    expect(File('${tmp.path}/b/stream.bin').readAsBytesSync(), data);
+    expect(b.transfers.single.progress, 1);
+  });
+
   test('uploads without a valid session are rejected', () async {
     final client = HttpClient()..badCertificateCallback = (_, _, _) => true;
     final req = await client.postUrl(
