@@ -11,7 +11,7 @@ const signalingUrl = String.fromEnvironment('SIGNALING_URL');
 
 /// The web app (GitHub Pages), for devices without the app: it finds this
 /// one through the signaling server.
-const webAppUrl = 'https://domeepc.github.io/wisp/';
+const webAppUrl = 'https://domeepc.github.io/wisp/app/';
 
 /// Someone in our room on the signaling server: a device on the same
 /// network.

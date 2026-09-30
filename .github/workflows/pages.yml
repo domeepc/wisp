@@ -1,4 +1,5 @@
-# Builds the web app and publishes it to GitHub Pages on every push to main.
+# Builds the site (site/) and the web app (served under app/) and publishes
+# them to GitHub Pages on every push to main.
 # One-time setup: repository Settings → Pages → Source: "GitHub Actions".
 name: Web app (GitHub Pages)
 
@@ -32,18 +33,24 @@ jobs:
       - run: flutter pub get
       - run: flutter analyze
       - run: flutter test
-      # Pages serves the site under /<repository name>/, and shows the
+      # Pages serves the web app under /<repository name>/app/, and shows the
       # version tool/version.sh prints (1.0.<commits>).
       # SIGNALING_URL: repository Settings → Secrets and variables → Actions
       # → Variables (the deployed server/, e.g. wss://wisp-signal.you.workers.dev).
       - run: >-
           flutter build web --release --wasm
-          --base-href "/${{ github.event.repository.name }}/"
+          --base-href "/${{ github.event.repository.name }}/app/"
           --build-name "$(./tool/version.sh)"
           --dart-define=SIGNALING_URL=${{ vars.SIGNALING_URL }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: npm ci && npm run build
+        working-directory: site
+      - run: cp -r build/web site/dist/app
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: build/web
+          path: site/dist
 
   deploy:
     needs: build
