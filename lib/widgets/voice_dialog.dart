@@ -34,6 +34,8 @@ class _VoiceDialogState extends State<_VoiceDialog> {
   final _clock = Stopwatch();
   Timer? _ticker;
   StreamSubscription<Amplitude>? _levels;
+  StreamSubscription<RecordState>? _states;
+  int _restarts = 0;
 
   /// Raw 16-bit samples, made into a .wav at the end: plays everywhere,
   /// and needs no encoder (Linux would need ffmpeg for anything else).
@@ -67,6 +69,9 @@ class _VoiceDialogState extends State<_VoiceDialog> {
       await _recorder.setOnConfigChanged((config) => _config = config);
       _pcmDone = (await _recorder.startStream(_config)).forEach(_pcm.add);
       if (!mounted) return;
+      _states = _recorder.onStateChanged().listen((state) {
+        if (state == RecordState.stop && !_saving) _restart();
+      });
       _levels = _recorder
           .onAmplitudeChanged(const Duration(milliseconds: 100))
           .listen((a) => setState(() => _level = _loudness(a.current)));
@@ -86,6 +91,25 @@ class _VoiceDialogState extends State<_VoiceDialog> {
     }
   }
 
+  /// Windows stops by itself when the microphone drops out for a moment
+  /// (e.g. a Bluetooth headset switching to its mic profile), saying so
+  /// only through the state. Start it again, keeping what we have.
+  // ponytail: 3 restarts then give up; a device picker if a mic keeps dropping.
+  Future<void> _restart() async {
+    if (++_restarts > 3) return _fail(_micStopped);
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!mounted || _saving || _error != null) return;
+    try {
+      _pcmDone = (await _recorder.startStream(_config)).forEach(_pcm.add);
+    } on Exception {
+      _fail(_micStopped);
+    }
+  }
+
+  static const _micStopped =
+      'The microphone stopped. Check it\'s connected and not in use by '
+      'another app.';
+
   /// Maps dBFS (-160 silent … 0 loudest) onto 0 to 1; speech sits
   /// around -30.
   static double _loudness(double dbfs) => ((dbfs + 50) / 50).clamp(0, 1);
@@ -99,6 +123,7 @@ class _VoiceDialogState extends State<_VoiceDialog> {
     _clock.stop();
     _ticker?.cancel();
     _levels?.cancel();
+    _states?.cancel();
   }
 
   Future<void> _done() async {
@@ -108,7 +133,7 @@ class _VoiceDialogState extends State<_VoiceDialog> {
       await _recorder.stop();
       await _pcmDone;
       _finished = true;
-      if (_pcm.isEmpty) return _fail('Nothing was recorded.');
+      if (_pcm.isEmpty) return _fail(_micStopped);
       final data = wav(
         _pcm.takeBytes(),
         sampleRate: _config.sampleRate,
