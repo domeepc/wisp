@@ -120,29 +120,41 @@ class _IncomingSheetState extends State<_IncomingSheet> {
                 borderRadius: BorderRadius.circular(AppRadius.md),
                 side: const BorderSide(color: AppColors.border),
               ),
-              child: Column(
-                children: [
-                  for (final (i, file) in files.indexed) ...[
-                    if (i > 0) const Divider(),
-                    Padding(
-                      padding: const EdgeInsets.all(AppSpacing.md),
-                      child: Row(
-                        children: [
-                          FileTypeBadge(fileName: file.name, size: 34),
-                          const SizedBox(width: AppSpacing.md),
-                          Expanded(
-                            child: Text(
-                              file.name,
-                              style: text.bodyLarge,
-                              overflow: .ellipsis,
-                            ),
+              clipBehavior: .antiAlias,
+              // Long lists scroll inside the card so the buttons stay on screen.
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.sizeOf(context).height * 0.35,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      for (final (i, file) in files.indexed) ...[
+                        if (i > 0) const Divider(),
+                        Padding(
+                          padding: const EdgeInsets.all(AppSpacing.md),
+                          child: Row(
+                            children: [
+                              FileTypeBadge(fileName: file.name, size: 34),
+                              const SizedBox(width: AppSpacing.md),
+                              Expanded(
+                                child: Text(
+                                  file.name,
+                                  style: text.bodyLarge,
+                                  overflow: .ellipsis,
+                                ),
+                              ),
+                              Text(
+                                formatBytes(file.bytes),
+                                style: text.bodyMedium,
+                              ),
+                            ],
                           ),
-                          Text(formatBytes(file.bytes), style: text.bodyMedium),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
               ),
             ),
             const SizedBox(height: AppSpacing.lg),
