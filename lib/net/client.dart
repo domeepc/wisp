@@ -187,37 +187,46 @@ class WispClient {
       final tokens = (jsonDecode(body) as Map)['tokens'] as Map;
       transfer.setStatus(TransferStatus.running);
 
-      // 2. Upload the files one by one.
-      for (final (i, file) in transfer.files.indexed) {
-        if (cancelled) return;
-        final req = current = await client.postUrl(
-          _uri(peer, Api.upload, {
-            'sessionId': sessionId,
-            'fileId': '$i',
-            'token': '${tokens['$i']}',
-          }),
-        );
-        req.contentLength = file.bytes;
-        req.headers.contentType = ContentType.binary;
-        await req.addStream(
-          file.openRead().map((chunk) {
-            transfer.addProgress(i, chunk.length);
-            return chunk;
-          }),
-        );
-        final res = await req.close();
-        await res.drain<void>();
-        if (res.statusCode == 410) {
-          transfer.setStatus(
-            TransferStatus.cancelled,
-            error: 'Cancelled on ${peer.name}',
+      // 2. Upload the files, a few at a time. Cancelling closes the client,
+      // which aborts every upload still going.
+      final queue = transfer.files.indexed.iterator;
+      Future<void> lane() async {
+        while (!cancelled && queue.moveNext()) {
+          final (i, file) = queue.current;
+          final req = await client.postUrl(
+            _uri(peer, Api.upload, {
+              'sessionId': sessionId,
+              'fileId': '$i',
+              'token': '${tokens['$i']}',
+            }),
           );
-          return;
-        }
-        if (res.statusCode != 200) {
-          throw HttpException('Upload failed (${res.statusCode})');
+          req.contentLength = file.bytes;
+          req.headers.contentType = ContentType.binary;
+          await req.addStream(
+            file.openRead().map((chunk) {
+              transfer.addProgress(i, chunk.length);
+              return chunk;
+            }),
+          );
+          final res = await req.close();
+          await res.drain<void>();
+          if (res.statusCode == 410) {
+            transfer.setStatus(
+              TransferStatus.cancelled,
+              error: 'Cancelled on ${peer.name}',
+            );
+          }
+          if (res.statusCode != 200) {
+            // Also stops the other lanes. After a 410 the transfer is
+            // already over, so the failure below doesn't replace it.
+            throw HttpException('Upload failed (${res.statusCode})');
+          }
         }
       }
+
+      await Future.wait([
+        for (var n = 0; n < _lanes; n++) lane(),
+      ], eagerError: true);
       transfer.setStatus(TransferStatus.done);
     } catch (e) {
       if (!cancelled) {
@@ -262,6 +271,10 @@ class WispClient {
     _ => 'Transfer failed',
   };
 }
+
+/// Files uploaded at once, like LocalSend: while one waits on the disk or
+/// on a slow TCP window, the other keeps the Wi-Fi busy.
+const _lanes = 2;
 
 typedef _SendJob = ({
   SendPort reply,

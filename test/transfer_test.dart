@@ -97,6 +97,31 @@ void main() {
     );
   });
 
+  test('several files, sent a few at a time, all arrive intact', () async {
+    b.incoming.listen((r) => r.accept());
+    final files = [
+      for (final n in [3, 0, 1, 2, 4])
+        File('${tmp.path}/f$n.bin')..writeAsBytesSync(
+          List.generate(n * 700 * 1024, (i) => (i + n) % 251),
+        ),
+    ];
+
+    final sent = a.send(bAsSeenByA(), [
+      for (final f in files) SharedFile.fromPath(f.path),
+    ]);
+    await finished(sent);
+
+    expect(sent.status, TransferStatus.done, reason: sent.error);
+    expect(b.transfers.single.status, TransferStatus.done);
+    for (final f in files) {
+      final name = f.uri.pathSegments.last;
+      expect(
+        File('${tmp.path}/b/$name').readAsBytesSync(),
+        f.readAsBytesSync(),
+      );
+    }
+  });
+
   test('same name twice gets a (1) suffix', () async {
     b.incoming.listen((r) => r.accept());
     final file = SharedFile.fromPath(source('notes.txt', 'x').path);
