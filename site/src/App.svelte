@@ -43,7 +43,7 @@
   ];
 
   const faq = [
-    ['Do I need internet?', 'Not with the apps: both devices just need to be on the same Wi-Fi network or hotspot. The browser version uses the internet to find your devices.'],
+    ['Do I need internet?', 'Yes. Wisp uses the internet to find your devices and connect them. The files themselves go straight from one device to the other whenever the network allows.'],
     ['Does the other person need Wisp?', 'No. They can open Wisp in any web browser, on the same Wi-Fi as you.'],
     ['Is there a file size limit?', 'No. Send a single photo or a 50 GB folder the same way.'],
     ["Why can't I see my other device?", 'Check both are on the same network and Wisp is open. On guest or school Wi-Fi, devices often can\'t see each other: use Connect with code, or a phone hotspot.'],
@@ -161,7 +161,7 @@
     <p class="eyebrow">Why Wisp</p>
     <div class="split">
       <h2>Private by design, fast by default.</h2>
-      <p>Your files travel straight from one device to the other. They never touch a server.</p>
+      <p>Your files travel straight from one device to the other and are never stored on a server.</p>
     </div>
     <div class="grid">
       {#each features as [i, title, body]}
