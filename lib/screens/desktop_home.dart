@@ -20,6 +20,7 @@ import '../widgets/file_type_badge.dart';
 import '../widgets/searching_card.dart';
 import '../widgets/section_label.dart';
 import '../widgets/settings_button.dart';
+import '../widgets/state_transition.dart';
 import '../widgets/toasts.dart';
 import '../widgets/wisp_logo.dart';
 import '../widgets/status_dot.dart';
@@ -180,43 +181,51 @@ class _DesktopHomeState extends State<DesktopHome> {
           ],
         ),
         const SizedBox(height: AppSpacing.xl),
-        if (devices.isEmpty)
-          const SearchingCard()
-        else
-          LayoutBuilder(
-            builder: (context, constraints) {
-              const gap = AppSpacing.lg;
-              const minCardWidth = 190.0;
-              final columns = max(
-                1,
-                ((constraints.maxWidth + gap) / (minCardWidth + gap)).floor(),
-              );
-              final cardWidth =
-                  (constraints.maxWidth - gap * (columns - 1)) / columns;
+        StateTransition(
+          child: KeyedSubtree(
+            key: ValueKey(devices.isEmpty),
+            child: devices.isEmpty
+                ? const SearchingCard()
+                : LayoutBuilder(
+                    builder: (context, constraints) {
+                      const gap = AppSpacing.lg;
+                      const minCardWidth = 190.0;
+                      final columns = max(
+                        1,
+                        ((constraints.maxWidth + gap) / (minCardWidth + gap))
+                            .floor(),
+                      );
+                      final cardWidth =
+                          (constraints.maxWidth - gap * (columns - 1)) /
+                          columns;
 
-              return Wrap(
-                spacing: gap,
-                runSpacing: gap,
-                children: [
-                  for (final device in devices)
-                    SizedBox(
-                      width: cardWidth,
-                      child: DeviceCard(
-                        device: device,
-                        action: FilledButton(
-                          onPressed: count == 0 ? null : () => _sendTo(device),
-                          child: Text(switch (count) {
-                            0 => 'Select files first',
-                            1 => 'Send 1 file',
-                            _ => 'Send $count files',
-                          }),
-                        ),
-                      ),
-                    ),
-                ],
-              );
-            },
+                      return Wrap(
+                        spacing: gap,
+                        runSpacing: gap,
+                        children: [
+                          for (final device in devices)
+                            SizedBox(
+                              width: cardWidth,
+                              child: DeviceCard(
+                                device: device,
+                                action: FilledButton(
+                                  onPressed: count == 0
+                                      ? null
+                                      : () => _sendTo(device),
+                                  child: Text(switch (count) {
+                                    0 => 'Select files first',
+                                    1 => 'Send 1 file',
+                                    _ => 'Send $count files',
+                                  }),
+                                ),
+                              ),
+                            ),
+                        ],
+                      );
+                    },
+                  ),
           ),
+        ),
         const SizedBox(height: AppSpacing.xxl),
         SectionLabel(
           'Transfers',

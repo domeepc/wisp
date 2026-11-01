@@ -106,7 +106,26 @@ class ToastController extends ChangeNotifier {
 
   void dismiss(String key) {
     final entry = _entries.where((e) => e.key == key).firstOrNull;
-    if (entry == null) return;
+    if (entry == null || entry.dismissing.value) return;
+    entry
+      .._timer?.cancel()
+      .._timer = null;
+    entry.dismissing.value = true;
+    notifyListeners();
+    entry._exitTimer = Timer(
+      const Duration(milliseconds: 220),
+      () => _finishDismiss(entry),
+    );
+  }
+
+  void _finishDismiss(_ToastEntry entry) {
+    if (!_entries.contains(entry)) return;
+    _remove(entry);
+    notifyListeners();
+  }
+
+  void _removeAfterSwipe(_ToastEntry entry) {
+    if (!_entries.contains(entry)) return;
     _remove(entry);
     notifyListeners();
   }
@@ -136,11 +155,14 @@ class _ToastEntry {
   final ToastController owner;
 
   Timer? _timer;
+  Timer? _exitTimer;
   bool hovered = false;
+  final dismissing = ValueNotifier(false);
 
   /// Starts the countdown to going away, unless it has to stay for now.
   void schedule() {
     _timer?.cancel();
+    if (dismissing.value) return;
     final now = content();
     if (now.sticky || hovered) return;
     final time = now.actions.isEmpty
@@ -151,6 +173,8 @@ class _ToastEntry {
 
   void dispose() {
     _timer?.cancel();
+    _exitTimer?.cancel();
+    dismissing.dispose();
     updates?.removeListener(schedule);
   }
 }
@@ -256,7 +280,18 @@ class _ToastCardState extends State<_ToastCard>
   )..forward();
 
   @override
+  void initState() {
+    super.initState();
+    widget.entry.dismissing.addListener(_onDismissRequested);
+  }
+
+  void _onDismissRequested() {
+    if (widget.entry.dismissing.value) _appear.reverse();
+  }
+
+  @override
   void dispose() {
+    widget.entry.dismissing.removeListener(_onDismissRequested);
     _appear.dispose();
     super.dispose();
   }
@@ -264,6 +299,9 @@ class _ToastCardState extends State<_ToastCard>
   @override
   Widget build(BuildContext context) {
     final entry = widget.entry;
+    _appear.duration = Duration(
+      milliseconds: MediaQuery.disableAnimationsOf(context) ? 120 : 220,
+    );
     final curve = CurvedAnimation(parent: _appear, curve: Curves.easeOutCubic);
     // Grows into place. Not a SizeTransition: that clips the shadow.
     return AnimatedBuilder(
@@ -286,7 +324,7 @@ class _ToastCardState extends State<_ToastCard>
             padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
             child: Dismissible(
               key: ValueKey(entry),
-              onDismissed: (_) => entry.owner.dismiss(entry.key),
+              onDismissed: (_) => entry.owner._removeAfterSwipe(entry),
               child: MouseRegion(
                 // Reading it: don't go away meanwhile.
                 onEnter: (_) {
