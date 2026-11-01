@@ -12,6 +12,7 @@ import '../widgets/device_card.dart';
 import '../widgets/file_type_badge.dart';
 import '../widgets/searching_card.dart';
 import '../widgets/section_label.dart';
+import '../widgets/state_transition.dart';
 import 'transfer_screen.dart';
 
 /// Page 2: review the picked files, then tap a device to send them.
@@ -94,21 +95,40 @@ class _SendScreenState extends State<SendScreen> {
             const SizedBox(height: AppSpacing.xl),
             const SectionLabel('Tap a device to send'),
             const SizedBox(height: AppSpacing.md),
-            if (devices.isEmpty) const SearchingCard(),
-            for (var i = 0; i < devices.length; i += 2) ...[
-              if (i > 0) const SizedBox(height: AppSpacing.md),
-              Row(
-                children: [
-                  Expanded(child: _card(devices[i])),
-                  const SizedBox(width: AppSpacing.md),
-                  Expanded(
-                    child: i + 1 < devices.length
-                        ? _card(devices[i + 1])
-                        : const SizedBox.shrink(),
-                  ),
-                ],
+            StateTransition(
+              child: KeyedSubtree(
+                key: ValueKey(devices.isEmpty),
+                child: devices.isEmpty
+                    ? const SearchingCard()
+                    : LayoutBuilder(
+                        builder: (context, constraints) {
+                          const gap = AppSpacing.md;
+                          const minCardWidth = 190.0;
+                          final columns =
+                              ((constraints.maxWidth + gap) /
+                                      (minCardWidth + gap))
+                                  .floor()
+                                  .clamp(1, devices.length)
+                                  .toInt();
+                          final cardWidth =
+                              (constraints.maxWidth - gap * (columns - 1)) /
+                              columns;
+
+                          return Wrap(
+                            spacing: gap,
+                            runSpacing: gap,
+                            children: [
+                              for (final device in devices)
+                                SizedBox(
+                                  width: cardWidth,
+                                  child: _card(device),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
               ),
-            ],
+            ),
             const SizedBox(height: AppSpacing.xxl),
             Text(
               'Only devices on the same Wi-Fi show up here.',

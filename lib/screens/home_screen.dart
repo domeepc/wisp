@@ -12,6 +12,7 @@ import '../widgets/searching_card.dart';
 import '../widgets/device_avatar.dart';
 import '../widgets/section_label.dart';
 import '../widgets/settings_button.dart';
+import '../widgets/state_transition.dart';
 import '../widgets/toasts.dart';
 import '../widgets/wisp_logo.dart';
 import '../widgets/status_dot.dart';
@@ -166,19 +167,35 @@ class _MobileHomeState extends State<MobileHome> {
             const SizedBox(height: AppSpacing.xxl),
             const SectionLabel('Send'),
             const SizedBox(height: AppSpacing.md),
-            Row(
-              spacing: AppSpacing.sm,
-              children: [
-                for (final (i, (icon, label, onTap)) in sendActions.indexed)
-                  Expanded(
-                    child: _SendTile(
-                      icon: icon,
-                      label: label,
-                      primary: i == 0,
-                      onTap: onTap,
-                    ),
-                  ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                const gap = AppSpacing.sm;
+                const minTileWidth = 88.0;
+                final columns =
+                    ((constraints.maxWidth + gap) / (minTileWidth + gap))
+                        .floor()
+                        .clamp(1, sendActions.length)
+                        .toInt();
+                final tileWidth =
+                    (constraints.maxWidth - gap * (columns - 1)) / columns;
+
+                return Wrap(
+                  spacing: gap,
+                  runSpacing: gap,
+                  children: [
+                    for (final (i, (icon, label, onTap)) in sendActions.indexed)
+                      SizedBox(
+                        width: tileWidth,
+                        child: _SendTile(
+                          icon: icon,
+                          label: label,
+                          primary: i == 0,
+                          onTap: onTap,
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: AppSpacing.xxl),
             SectionLabel(
@@ -191,29 +208,36 @@ class _MobileHomeState extends State<MobileHome> {
                   : null,
             ),
             const SizedBox(height: AppSpacing.md),
-            if (devices.isEmpty)
-              const SearchingCard()
-            else
-              Card(
-                child: Column(
-                  children: [
-                    for (final (i, device) in devices.indexed) ...[
-                      if (i > 0) const Divider(),
-                      ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: AppSpacing.lg,
-                          vertical: AppSpacing.xs,
+            StateTransition(
+              child: KeyedSubtree(
+                key: ValueKey(devices.isEmpty),
+                child: devices.isEmpty
+                    ? const SearchingCard()
+                    : Card(
+                        child: Column(
+                          children: [
+                            for (final (i, device) in devices.indexed) ...[
+                              if (i > 0) const Divider(),
+                              ListTile(
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: AppSpacing.lg,
+                                  vertical: AppSpacing.xs,
+                                ),
+                                leading: DeviceAvatar(
+                                  platform: device.platform,
+                                ),
+                                title: Text(device.name),
+                                subtitle: Text(device.subtitle),
+                                trailing: const Icon(Icons.chevron_right),
+                                onTap: () =>
+                                    _pickAndSend(pickFiles, to: device),
+                              ),
+                            ],
+                          ],
                         ),
-                        leading: DeviceAvatar(platform: device.platform),
-                        title: Text(device.name),
-                        subtitle: Text(device.subtitle),
-                        trailing: const Icon(Icons.chevron_right),
-                        onTap: () => _pickAndSend(pickFiles, to: device),
                       ),
-                    ],
-                  ],
-                ),
               ),
+            ),
           ],
         ),
       ),

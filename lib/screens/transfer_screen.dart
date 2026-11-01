@@ -6,6 +6,7 @@ import '../theme/app_theme.dart';
 import '../theme/tokens.dart';
 import '../utils/format.dart';
 import '../utils/open_folder.dart';
+import '../widgets/state_transition.dart';
 
 /// Page 3: live progress of one transfer, sending or receiving.
 class TransferScreen extends StatefulWidget {
@@ -73,7 +74,7 @@ class _TransferView extends StatelessWidget {
           onPressed: () => Navigator.pop(context),
           child: Text(active ? 'Hide' : 'Close'),
         ),
-        title: Text(title),
+        title: StateTransition(child: Text(title, key: ValueKey(t.status))),
       ),
       body: SafeArea(
         child: Center(
@@ -121,7 +122,15 @@ class _TransferView extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: AppSpacing.xxl),
-                      ..._middle(context),
+                      StateTransition(
+                        child: KeyedSubtree(
+                          key: ValueKey(t.status),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: _middle(context),
+                          ),
+                        ),
+                      ),
                       const SizedBox(height: AppSpacing.lg),
                     ],
                   ),
