@@ -483,11 +483,11 @@
     .strip > :nth-child(5) { animation-delay: 0.64s; }
     .strip > :nth-child(6) { animation-delay: 0.72s; }
     .toast { animation: rise 0.7s 2.5s both; }
-    .dot.blue::before { animation: pulse 1.8s ease-out infinite; }
+    .dot.blue::before { animation: none; }
 
     /* Sections rise in as they scroll into view, where browsers support it. */
     @supports (animation-timeline: view()) {
-      .box, .browser-band, .dl, dt, dd {
+      .box, .browser-band, .dl, dt, dd, #how > h2, #features .split > h2 {
         animation: rise linear both;
         animation-timeline: view();
         animation-range: entry 0% entry 70%;
@@ -510,5 +510,99 @@
     .stage { justify-content: center; }
     .toast { right: 0; bottom: 0; width: 270px; }
     .window .app { zoom: 0.3 !important; }
+  }
+
+  /* Quiet editorial system: reference-led spacing, with Wisp's own identity. */
+  :global(:root) {
+    --bg: #f6f5f1;
+    --surface: #fffefa;
+    --muted: #efeee9;
+    --border: #e5e2da;
+    --border-strong: #cbc7bd;
+    --text: #171d2b;
+    --text-2: #686c75;
+    --accent: #3157d5;
+    --accent-soft: #e9edfa;
+    --dark: #171d2b;
+  }
+  :global(body) { background: var(--bg); }
+  section { padding-top: 76px; padding-bottom: 76px; }
+  .nav { padding-top: 24px; padding-bottom: 24px; }
+  .nav nav { gap: 32px; }
+  .nav nav a:not(.btn) { color: #50545d; font-weight: 400; }
+  .btn { border-radius: 12px; }
+  .btn.dark { background: var(--text); }
+  .btn.outline { background: transparent; }
+  .hero { grid-template-columns: 1.08fr 0.92fr; gap: 56px; padding-top: 34px; padding-bottom: 32px; }
+  .hero h1 { max-width: 660px; font-size: clamp(48px, 5.7vw, 70px); line-height: 1.02; }
+  .pill { background: transparent; border: 1px solid var(--border); color: #58627b; padding: 7px 12px; margin-bottom: 24px; }
+  .pill::before { color: var(--accent); }
+  .lead { max-width: 490px; font-size: 18px; line-height: 1.65; margin: 22px 0 28px; }
+  .stage { min-height: 620px; justify-content: center; padding: 26px 18px; }
+  .stage::before { width: 100%; height: 100%; inset: 0; border-radius: 34px; background: #eeede7; }
+  .phone { --z: 0.68; border: 7px solid #222733; border-radius: 42px; box-shadow: 0 28px 65px -38px #17213d99; }
+  .toast { right: -12px; bottom: 28px; border-radius: 16px; box-shadow: 0 16px 36px -28px #17213d99; }
+  .phone .label .dot.blue { position: relative; }
+  .phone .label .dot.blue::before { animation: none; }
+  .phone .label .dot.blue::after {
+    content: ''; position: absolute; left: 0; top: 50%; width: 8px; height: 8px;
+    border: 1px solid var(--accent); border-radius: 50%; pointer-events: none;
+    transform: translateY(-50%) scale(.7); opacity: 0;
+  }
+  .strip { border-color: var(--border); padding-top: 24px; padding-bottom: 24px; }
+  .strip b { color: #444956; font-size: 14px; }
+  .eyebrow { letter-spacing: 1px; }
+  .box { border-radius: 18px; background: var(--surface); box-shadow: none; }
+  .grid { gap: 14px; }
+  .box h3 { margin-top: 16px; }
+  .browser-band { background: #eceef5; border-radius: 28px; padding: 48px; }
+  .window { box-shadow: 0 20px 50px -38px #17213d99; }
+  .get { padding: 88px 0; }
+  .dl { border-radius: 14px; }
+  dt { padding-top: 26px; }
+  :global(a:focus-visible), :global(button:focus-visible) { outline: 3px solid #3157d5; outline-offset: 4px; }
+  @media (prefers-reduced-motion: reduce) {
+    :global(*), :global(*::before), :global(*::after) {
+      scroll-behavior: auto !important;
+      animation: none !important;
+      transition: none !important;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .stage::before { animation: stage-reveal 900ms 80ms var(--ease-out) both; }
+    .phone { animation: phone-arrive 900ms 140ms var(--ease-out) both; }
+    .toast { animation: toast-arrive 560ms 700ms var(--ease-out) both; }
+    .phone .label .dot.blue::after { animation: signal-wave 1900ms 900ms ease-out infinite; }
+    .list .tile-row:nth-child(2) { animation-delay: 70ms; }
+    .list .tile-row:nth-child(3) { animation-delay: 140ms; }
+    .banner { animation-delay: 1.25s; }
+    @media (hover: hover) and (pointer: fine) {
+      .box { transition: translate 220ms var(--ease-out), border-color 220ms ease; }
+      .box:hover { translate: 0 -3px; border-color: var(--border-strong); }
+    }
+  }
+  @keyframes stage-reveal { from { opacity: 0; transform: scale(.985); } to { opacity: 1; transform: scale(1); } }
+  @keyframes phone-arrive { from { opacity: 0; transform: translate3d(0, 22px, 0) scale(.975); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
+  @keyframes toast-arrive { from { opacity: 0; transform: translate3d(0, 14px, 0) scale(.98); } to { opacity: 1; transform: translate3d(0, 0, 0) scale(1); } }
+  @keyframes signal-wave { 0% { transform: translateY(-50%) scale(.7); opacity: .65; } 100% { transform: translateY(-50%) scale(2.8); opacity: 0; } }
+  @media (max-width: 900px) {
+    section { padding-top: 54px; padding-bottom: 54px; }
+    .hero { grid-template-columns: 1fr; gap: 24px; padding-top: 32px; }
+    .hero h1 { font-size: clamp(44px, 11vw, 60px); }
+    .stage { min-height: 570px; padding: 18px 12px 36px; }
+    .stage::before { width: 100%; height: 94%; top: 0; left: 0; }
+    .phone { --z: 0.62; }
+    .toast { right: -2px; bottom: 0; }
+    .grid { grid-template-columns: 1fr; }
+    .browser-band { padding: 30px 22px; }
+    .get { padding: 64px 0; }
+  }
+  @media (max-width: 420px) {
+    .wrap { padding-left: 18px; padding-right: 18px; }
+    .hero .row { align-items: stretch; flex-direction: column; }
+    .hero .btn { justify-content: center; }
+    .stage { min-height: 510px; }
+    .phone { --z: 0.54; }
+    .toast { width: 250px; padding: 12px; }
   }
 </style>
