@@ -4,22 +4,22 @@ import 'package:flutter/painting.dart';
 /// screens — fine-tune them against the design file if you have it.
 abstract final class AppColors {
   // Surfaces
-  static const background = Color(0xFFF3F2EE); // warm off-white page
-  static const surface = Color(0xFFFFFFFF); // cards, sheets
+  static const background = Color(0xFFF6F5F1); // warm paper page
+  static const surface = Color(0xFFFFFEFA); // cards, sheets
   // Gray icon circles, security code box.
-  static const surfaceMuted = Color(0xFFEEEDE8);
+  static const surfaceMuted = Color(0xFFEFEEE9);
   // Card outlines, dividers, progress track.
-  static const border = Color(0xFFE6E2DA);
+  static const border = Color(0xFFE5E2DA);
   // Dashed drop zones.
-  static const borderStrong = Color(0xFFCFC9BD);
+  static const borderStrong = Color(0xFFCBC7BD);
 
   // Text
-  static const textPrimary = Color(0xFF1A1A1C);
-  static const textSecondary = Color(0xFF6B6B70);
+  static const textPrimary = Color(0xFF171D2B);
+  static const textSecondary = Color(0xFF686C75);
 
   // Accent (blue)
-  static const accent = Color(0xFF2F4BFF);
-  static const accentSoft = Color(0xFFE7EBFD); // icon circles, MP4/ZIP badges
+  static const accent = Color(0xFF3157D5);
+  static const accentSoft = Color(0xFFE9EDFA); // icon circles, MP4/ZIP badges
 
   // Status
   static const success = Color(0xFF1F7A4D);
