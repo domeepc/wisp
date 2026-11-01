@@ -272,9 +272,12 @@
     --bg: #f3f2ee; --surface: #fff; --muted: #eeede8; --border: #e6e2da; --border-strong: #cfc9bd;
     --text: #1a1a1c; --text-2: #6b6b70; --accent: #2f4bff; --accent-soft: #e7ebfd;
     --success: #1f7a4d; --success-soft: #e6f0ea; --danger: #b3261e; --danger-soft: #f8e3df;
-    --dark: #17181c;
+    --dark: #17181c; --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   }
   :global(html) { scroll-behavior: smooth; }
+  @media (prefers-reduced-motion: reduce) {
+    :global(html) { scroll-behavior: auto; }
+  }
   :global(body) {
     margin: 0; background: var(--bg); color: var(--text);
     font: 16px/1.55 'IBM Plex Sans', system-ui, sans-serif;
@@ -449,11 +452,16 @@
   footer { display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap; padding-top: 32px; padding-bottom: 48px; border-top: 1px solid var(--border); }
   footer a { text-decoration: underline; }
 
-  .btn, .box, .dl { transition: translate 0.2s, box-shadow 0.2s, background 0.2s; }
-  .btn:hover, .box:hover, .dl:not(.off):hover { translate: 0 -2px; }
-  .box:hover { box-shadow: 0 14px 30px -18px #0004; }
-  .btn:active { translate: 0 1px; }
-  .nav nav a:not(.btn):hover { color: var(--accent); }
+  .btn {
+    transition: translate 160ms var(--ease-out), transform 160ms var(--ease-out);
+  }
+  .btn:not([aria-disabled='true']):active { transform: scale(0.97); }
+
+  @media (hover: hover) and (pointer: fine) {
+    .btn:not([aria-disabled='true']):hover { translate: 0 -2px; }
+    .nav nav a:not(.btn) { transition: color 160ms ease; }
+    .nav nav a:not(.btn):hover { color: var(--accent); }
+  }
 
   @media (prefers-reduced-motion: no-preference) {
     .hero > div:first-child > * { animation: rise 0.7s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
@@ -463,10 +471,10 @@
     .hero > div:first-child > :nth-child(5) { animation-delay: 0.24s; }
     .phone { animation: rise 0.9s 0.2s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
     /* Devices turn up one by one, as if just found. */
-    .list .tile-row { animation: rise 0.5s both; }
-    .list .tile-row:nth-child(1) { animation-delay: 0.9s; }
-    .list .tile-row:nth-child(2) { animation-delay: 1.3s; }
-    .list .tile-row:nth-child(3) { animation-delay: 1.7s; }
+    .list .tile-row { animation: rise 240ms var(--ease-out) both; }
+    .list .tile-row:nth-child(1) { animation-delay: 0ms; }
+    .list .tile-row:nth-child(2) { animation-delay: 60ms; }
+    .list .tile-row:nth-child(3) { animation-delay: 120ms; }
     .banner { animation: rise 0.6s 2.2s both; }
     .strip > * { animation: rise 0.6s both; }
     .strip > :nth-child(2) { animation-delay: 0.4s; }
@@ -474,8 +482,7 @@
     .strip > :nth-child(4) { animation-delay: 0.56s; }
     .strip > :nth-child(5) { animation-delay: 0.64s; }
     .strip > :nth-child(6) { animation-delay: 0.72s; }
-    .toast { animation: rise 0.7s 2.5s both, float 5s 3.2s ease-in-out infinite; }
-    .bar span { animation: fill 5s 2.8s ease-in-out infinite both; }
+    .toast { animation: rise 0.7s 2.5s both; }
     .dot.blue::before { animation: pulse 1.8s ease-out infinite; }
 
     /* Sections rise in as they scroll into view, where browsers support it. */
@@ -488,8 +495,6 @@
     }
   }
   @keyframes rise { from { opacity: 0; transform: translateY(16px); } }
-  @keyframes float { 50% { translate: 0 -8px; } }
-  @keyframes fill { 0% { width: 15%; } 80%, 100% { width: 100%; } }
   @keyframes pulse { from { box-shadow: 0 0 0 0 #2f4bff66; } to { box-shadow: 0 0 0 8px #2f4bff00; } }
 
   @media (max-width: 900px) {
